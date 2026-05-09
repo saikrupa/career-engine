@@ -1,5 +1,5 @@
 {
-  "name": "career-ops",
+  "name": "career-engine",
   "version": "1.7.0",
   "description": "AI-powered job search pipeline built on Claude Code",
   "scripts": {
@@ -15,7 +15,15 @@
     "rollback": "node update-system.mjs rollback",
     "liveness": "node check-liveness.mjs",
     "scan": "node scan.mjs",
-    "gemini:eval": "node gemini-eval.mjs"
+    "gemini:eval": "node gemini-eval.mjs",
+    "portal:login": "node portal-assist.mjs login",
+    "portal:capture": "node portal-assist.mjs capture",
+    "apply:assist": "node apply-assist.mjs",
+    "notify:test": "node notify-alerts.mjs",
+    "alert:once": "node job-alert-suite.mjs once",
+    "alert:run": "node job-alert-suite.mjs run",
+    "alert:dry-run": "node job-alert-suite.mjs once --dry-run",
+    "test:assist": "node tests/portal-assist.test.mjs"
   },
   "keywords": [
     "ai",
@@ -28,7 +36,7 @@
   "homepage": "https://santifer.io",
   "repository": {
     "type": "git",
-    "url": "https://github.com/santifer/career-ops"
+    "url": "https://github.com/santifer/career-engine"
   },
   "license": "MIT",
   "dependencies": {

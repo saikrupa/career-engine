@@ -1,9 +1,9 @@
-# Career-Ops
+# Career-Engine
 
 [English](README.md) | [Español](README.es.md) | [Português (Brasil)](README.pt-BR.md) | [한국어](README.ko-KR.md) | [日本語](README.ja.md) | [Русский](README.ru.md) | [简体中文](README.cn.md) | [繁體中文](README.zh-TW.md)
 
 <p align="center">
-  <a href="https://x.com/santifer"><img src="docs/hero-banner.jpg" alt="Career-Ops — Multi-Agent Job Search System" width="800"></a>
+  <a href="https://x.com/santifer"><img src="docs/hero-banner.jpg" alt="Career-Engine — Multi-Agent Job Search System" width="800"></a>
 </p>
 
 <p align="center">
@@ -32,7 +32,7 @@
 ---
 
 <p align="center">
-  <img src="docs/demo.gif" alt="Career-Ops Demo" width="800">
+  <img src="docs/demo.gif" alt="Career-Engine Demo" width="800">
 </p>
 
 <p align="center"><strong>740+ vagas avaliadas · 100+ CVs personalizados · 1 vaga dos sonhos conquistada</strong></p>
@@ -41,7 +41,7 @@
 
 ## O que é isso
 
-Career-Ops transforma qualquer CLI de código com IA em uma central completa de busca de emprego. Em vez de acompanhar candidaturas manualmente em planilha, você tem um pipeline com IA que:
+Career-Engine transforma qualquer CLI de código com IA em uma central completa de busca de emprego. Em vez de acompanhar candidaturas manualmente em planilha, você tem um pipeline com IA que:
 
 - **Avalia vagas** com um sistema estruturado de pontuação A-F (10 dimensões com pesos)
 - **Gera PDFs personalizados** -- CVs otimizados para ATS, ajustados por descrição de vaga
@@ -55,7 +55,7 @@ Career-ops é agentic: Claude Code navega páginas de carreira com Playwright, a
 
 > **Aviso: as primeiras avaliações não vão ser ótimas.** O sistema ainda não conhece você. Dê contexto -- seu CV, sua trajetória profissional, suas provas de resultado, suas preferências, no que você é bom e o que quer evitar. Quanto mais você alimenta, melhor ele fica. Pense nisso como o onboarding de um novo recrutador: na primeira semana ele precisa te conhecer, depois se torna indispensável.
 
-Construído por alguém que usou isso para avaliar 740+ vagas, gerar 100+ CVs personalizados e conquistar uma posição de Head of Applied AI. [Leia o estudo de caso completo](https://santifer.io/career-ops-system).
+Construído por alguém que usou isso para avaliar 740+ vagas, gerar 100+ CVs personalizados e conquistar uma posição de Head of Applied AI. [Leia o estudo de caso completo](https://santifer.io/career-engine-system).
 
 ## Funcionalidades
 
@@ -76,8 +76,8 @@ Construído por alguém que usou isso para avaliar 740+ vagas, gerar 100+ CVs pe
 
 ```bash
 # 1. Clone e instale
-git clone https://github.com/santifer/career-ops.git
-cd career-ops && npm install
+git clone https://github.com/santifer/career-engine.git
+cd career-engine && npm install
 npx playwright install chromium   # Necessário para geração de PDF
 
 # 2. Verifique o setup
@@ -100,7 +100,7 @@ claude   # Abra o Claude Code neste diretório
 # "Atualize meu perfil com este CV que vou colar"
 
 # 6. Comece a usar
-# Cole a URL de uma vaga ou rode /career-ops
+# Cole a URL de uma vaga ou rode /career-engine
 ```
 
 > **O sistema foi projetado para ser customizado pelo próprio Claude.** Modos, arquétipos, pesos de pontuação, scripts de negociação -- é só pedir para ele alterar. Ele lê os mesmos arquivos que usa, então sabe exatamente o que editar.
@@ -112,21 +112,21 @@ Veja [docs/SETUP.md](docs/SETUP.md) para o guia completo de configuração.
 Career-ops é um único comando slash com múltiplos modos:
 
 ```
-/career-ops                → Mostrar todos os comandos disponíveis
-/career-ops {cole um JD}   → Auto-pipeline completo (avaliar + PDF + tracker)
-/career-ops scan           → Escanear portais por novas vagas
-/career-ops pdf            → Gerar CV otimizado para ATS
-/career-ops batch          → Avaliar múltiplas vagas em lote
-/career-ops tracker        → Ver status das candidaturas
-/career-ops apply          → Preencher formulários de candidatura com IA
-/career-ops pipeline       → Processar URLs pendentes
-/career-ops contacto       → Mensagem de outreach no LinkedIn
-/career-ops deep           → Pesquisa aprofundada da empresa
-/career-ops training       → Avaliar um curso/certificação
-/career-ops project        → Avaliar um projeto de portfólio
+/career-engine                → Mostrar todos os comandos disponíveis
+/career-engine {cole um JD}   → Auto-pipeline completo (avaliar + PDF + tracker)
+/career-engine scan           → Escanear portais por novas vagas
+/career-engine pdf            → Gerar CV otimizado para ATS
+/career-engine batch          → Avaliar múltiplas vagas em lote
+/career-engine tracker        → Ver status das candidaturas
+/career-engine apply          → Preencher formulários de candidatura com IA
+/career-engine pipeline       → Processar URLs pendentes
+/career-engine contacto       → Mensagem de outreach no LinkedIn
+/career-engine deep           → Pesquisa aprofundada da empresa
+/career-engine training       → Avaliar um curso/certificação
+/career-engine project        → Avaliar um projeto de portfólio
 ```
 
-Ou apenas cole uma URL ou descrição de vaga diretamente -- career-ops detecta automaticamente e roda o pipeline completo.
+Ou apenas cole uma URL ou descrição de vaga diretamente -- career-engine detecta automaticamente e roda o pipeline completo.
 
 ## Como funciona
 
@@ -171,8 +171,8 @@ O dashboard de terminal integrado permite navegar visualmente pelo seu pipeline:
 
 ```bash
 cd dashboard
-go build -o career-dashboard .
-./career-dashboard --path ..
+go build -o career-engine-dashboard .
+./career-engine-dashboard --path ..
 ```
 
 Recursos: 6 abas de filtro, 4 modos de ordenação, visualização agrupada/plana, prévias com carregamento sob demanda e alterações de status inline.
@@ -180,7 +180,7 @@ Recursos: 6 abas de filtro, 4 modos de ordenação, visualização agrupada/plan
 ## Estrutura do projeto
 
 ```
-career-ops/
+career-engine/
 ├── CLAUDE.md                    # Instruções para o agente
 ├── cv.md                        # Seu CV (crie este arquivo)
 ├── article-digest.md            # Seus proof points (opcional)
@@ -229,23 +229,23 @@ career-ops/
 
 ## Sobre o autor
 
-Sou o Santiago -- Head of Applied AI, ex-fundador (criei e vendi uma empresa que ainda opera com meu nome). Eu construí o career-ops para gerenciar minha própria busca de emprego. Funcionou: usei o sistema para conquistar meu cargo atual.
+Sou o Santiago -- Head of Applied AI, ex-fundador (criei e vendi uma empresa que ainda opera com meu nome). Eu construí o career-engine para gerenciar minha própria busca de emprego. Funcionou: usei o sistema para conquistar meu cargo atual.
 
 Meu portfólio e outros projetos open source → [santifer.io](https://santifer.io)
 
 ## Star History
 
-<a href="https://www.star-history.com/?repos=santifer%2Fcareer-ops&type=timeline&legend=top-left">
+<a href="https://www.star-history.com/?repos=santifer%2Fcareer-engine&type=timeline&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=santifer/career-ops&type=timeline&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=santifer/career-ops&type=timeline&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=santifer/career-ops&type=timeline&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=santifer/career-engine&type=timeline&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=santifer/career-engine&type=timeline&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=santifer/career-engine&type=timeline&legend=top-left" />
  </picture>
 </a>
 
 ## Aviso legal
 
-**career-ops é uma ferramenta local e open source — NÃO é um serviço hospedado.** Ao usar este software, você reconhece que:
+**career-engine é uma ferramenta local e open source — NÃO é um serviço hospedado.** Ao usar este software, você reconhece que:
 
 1. **Você controla seus dados.** Seu CV, informações de contato e dados pessoais ficam na sua máquina e são enviados diretamente para o provedor de IA que você escolher (Anthropic, OpenAI etc.). Nós não coletamos, armazenamos nem temos acesso aos seus dados.
 2. **Você controla a IA.** Os prompts padrão instruem a IA a não enviar candidaturas automaticamente, mas modelos de IA podem se comportar de forma imprevisível. Se você modificar os prompts ou usar modelos diferentes, faz isso por sua conta e risco. **Sempre revise o conteúdo gerado por IA antes de enviar.**

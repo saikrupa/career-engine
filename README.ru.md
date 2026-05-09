@@ -1,4 +1,4 @@
-# Career-Ops
+# Career-Engine
 
 [English](README.md) | [Español](README.es.md) | [Português (Brasil)](README.pt-BR.md) | [한국어](README.ko-KR.md) | [日本語](README.ja.md) | [Русский](README.ru.md) | [简体中文](README.cn.md) | [繁體中文](README.zh-TW.md)
 
@@ -17,7 +17,7 @@
 
 ## Что это
 
-Career-Ops превращает любой AI-CLI в полноценный командный центр для поиска работы. Вместо ручного ведения таблиц с откликами вы получаете ИИ-пайплайн, который:
+Career-Engine превращает любой AI-CLI в полноценный командный центр для поиска работы. Вместо ручного ведения таблиц с откликами вы получаете ИИ-пайплайн, который:
 
 - **Оценивает вакансии** по структурированной системе A–F (10 взвешенных параметров)
 - **Генерирует персонализированные PDF-резюме** — оптимизированные под ATS, адаптированные под каждую вакансию
@@ -46,8 +46,8 @@ Career-Ops превращает любой AI-CLI в полноценный ко
 
 ```bash
 # 1. Клонируй и установи
-git clone https://github.com/santifer/career-ops.git
-cd career-ops && npm install
+git clone https://github.com/santifer/career-engine.git
+cd career-engine && npm install
 npx playwright install chromium   # Для генерации PDF
 
 # 2. Проверь настройки
@@ -70,7 +70,7 @@ claude   # Открой Claude Code в директории проекта
 # "Обнови мой профиль из этого CV"
 
 # 6. Начинай
-# Вставь URL вакансии или запусти /career-ops
+# Вставь URL вакансии или запусти /career-engine
 ```
 
 ## Использование
@@ -78,21 +78,21 @@ claude   # Открой Claude Code в директории проекта
 Career-ops — одна slash-команда с множеством режимов:
 
 ```
-/career-ops                       → Показать все доступные команды
-/career-ops {вставь описание JD}  → Полный авто-пайплайн (оценка + PDF + трекер)
-/career-ops scan                  → Сканирование порталов
-/career-ops pdf                   → Генерация ATS-резюме
-/career-ops batch                 → Пакетная оценка вакансий
-/career-ops tracker               → Статус откликов
-/career-ops apply                 → Заполнение форм отклика с ИИ
-/career-ops pipeline              → Обработка очереди URL
-/career-ops contacto              → Сообщение в LinkedIn
-/career-ops deep                  → Глубокий анализ компании
-/career-ops training              → Оценка курса/сертификации
-/career-ops project               → Оценка портфолио-проекта
+/career-engine                       → Показать все доступные команды
+/career-engine {вставь описание JD}  → Полный авто-пайплайн (оценка + PDF + трекер)
+/career-engine scan                  → Сканирование порталов
+/career-engine pdf                   → Генерация ATS-резюме
+/career-engine batch                 → Пакетная оценка вакансий
+/career-engine tracker               → Статус откликов
+/career-engine apply                 → Заполнение форм отклика с ИИ
+/career-engine pipeline              → Обработка очереди URL
+/career-engine contacto              → Сообщение в LinkedIn
+/career-engine deep                  → Глубокий анализ компании
+/career-engine training              → Оценка курса/сертификации
+/career-engine project               → Оценка портфолио-проекта
 ```
 
-Или просто вставь URL вакансии — career-ops автоматически определит его и запустит полный пайплайн.
+Или просто вставь URL вакансии — career-engine автоматически определит его и запустит полный пайплайн.
 
 ## Как это работает
 
@@ -159,8 +159,8 @@ Career-ops поддерживает ключевые российские джо
 
 ```bash
 cd dashboard
-go build -o career-dashboard .
-./career-dashboard --path ..
+go build -o career-engine-dashboard .
+./career-engine-dashboard --path ..
 ```
 
 Возможности: 6 табов фильтрации, 4 режима сортировки, группированный/плоский вид, ленивая подгрузка превью, смена статусов inline.
@@ -168,7 +168,7 @@ go build -o career-dashboard .
 ## Структура проекта
 
 ```
-career-ops/
+career-engine/
 ├── CLAUDE.md                    # Инструкции для агента
 ├── cv.md                        # Ваше CV (создайте)
 ├── config/
@@ -205,7 +205,7 @@ career-ops/
 
 ## Дисклеймер
 
-**career-ops — локальный open-source инструмент, НЕ хостинг-сервис.** Используя это ПО, вы подтверждаете:
+**career-engine — локальный open-source инструмент, НЕ хостинг-сервис.** Используя это ПО, вы подтверждаете:
 
 1. **Вы контролируете свои данные.** CV, контакты и персональные данные остаются на вашей машине и отправляются напрямую выбранному AI-провайдеру (Anthropic, OpenAI и др.). Мы не собираем и не храним ваши данные.
 2. **Вы контролируете ИИ.** Промты по умолчанию запрещают ИИ автоматически отправлять отклики, но модели могут вести себя непредсказуемо. Модификация промтов — на ваш риск. **Всегда проверяйте сгенерированный контент перед отправкой.**

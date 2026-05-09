@@ -22,6 +22,7 @@ writing-samples/*
 
 # User config and customization (never auto-updated)
 config/profile.yml
+config/job-alerts.yml
 portals.yml
 modes/_profile.md
 .update-dismissed
@@ -29,6 +30,11 @@ modes/_profile.md
 
 # Secrets (never commit — use .env.example as template)
 .env
+
+# Local browser sessions for assistive portal capture/apply flows
+.browser-profiles/
+.auth/
+storage/
 
 # Generated
 .resolved-prompt-*
@@ -43,5 +49,5 @@ bun.lock
 # Claude Code local
 .claude/settings.local.json
 .claude/memory/
-career-dashboard
+career-engine-dashboard
 package-lock.json

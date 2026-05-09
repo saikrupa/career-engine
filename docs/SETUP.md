@@ -11,8 +11,8 @@
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/santifer/career-ops.git
-cd career-ops
+git clone https://github.com/santifer/career-engine.git
+cd career-engine
 npm install
 npx playwright install chromium   # Required for PDF generation
 ```
@@ -57,12 +57,12 @@ Then paste a job offer URL or description. Career-ops will automatically evaluat
 | Action | How |
 |--------|-----|
 | Evaluate an offer | Paste a URL or JD text |
-| Search for offers | `/career-ops scan` |
-| Process pending URLs | `/career-ops pipeline` |
-| Generate a PDF | `/career-ops pdf` |
-| Batch evaluate | `/career-ops batch` |
-| Check tracker status | `/career-ops tracker` |
-| Fill application form | `/career-ops apply` |
+| Search for offers | `/career-engine scan` |
+| Process pending URLs | `/career-engine pipeline` |
+| Generate a PDF | `/career-engine pdf` |
+| Batch evaluate | `/career-engine batch` |
+| Check tracker status | `/career-engine tracker` |
+| Fill application form | `/career-engine apply` |
 
 ## Verify Setup
 
@@ -75,6 +75,6 @@ node verify-pipeline.mjs     # Check pipeline integrity
 
 ```bash
 cd dashboard
-go build -o career-dashboard .
-./career-dashboard --path ..  # Opens TUI pipeline viewer
+go build -o career-engine-dashboard .
+./career-engine-dashboard --path ..  # Opens TUI pipeline viewer
 ```

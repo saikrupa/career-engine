@@ -1,5 +1,5 @@
 ---
-name: career-ops
+name: career-engine
 description: AI job search command center -- evaluate offers, generate CVs, scan portals, track applications
 arguments: mode # Claude Code specific
 user-invocable: true
@@ -7,7 +7,7 @@ argument-hint: "[scan | deep | pdf | oferta | ofertas | apply | batch | tracker 
 license: MIT
 ---
 
-# career-ops -- Router
+# career-engine -- Router
 
 ## Mode Routing
 
@@ -44,27 +44,27 @@ If `$mode` is not a sub-command AND doesn't look like a JD, show discovery.
 Show this menu:
 
 ```
-career-ops -- Command Center
+career-engine -- Command Center
 
 Available commands:
-  /career-ops {JD}      → AUTO-PIPELINE: evaluate + report + PDF + tracker (paste text or URL)
-  /career-ops pipeline  → Process pending URLs from inbox (data/pipeline.md)
-  /career-ops oferta    → Evaluation only A-F (no auto PDF)
-  /career-ops ofertas   → Compare and rank multiple offers
-  /career-ops contacto  → LinkedIn power move: find contacts + draft message
-  /career-ops deep      → Deep research prompt about company
-  /career-ops interview-prep → Generate company-specific interview prep doc
-  /career-ops pdf       → PDF only, ATS-optimized CV
-  /career-ops training  → Evaluate course/cert against North Star
-  /career-ops project   → Evaluate portfolio project idea
-  /career-ops tracker   → Application status overview
-  /career-ops apply     → Live application assistant (reads form + generates answers)
-  /career-ops scan      → Scan portals and discover new offers
-  /career-ops batch     → Batch processing with parallel workers
-  /career-ops patterns  → Analyze rejection patterns and improve targeting
-  /career-ops followup  → Follow-up cadence tracker: flag overdue, generate drafts
+  /career-engine {JD}      → AUTO-PIPELINE: evaluate + report + PDF + tracker (paste text or URL)
+  /career-engine pipeline  → Process pending URLs from inbox (data/pipeline.md)
+  /career-engine oferta    → Evaluation only A-F (no auto PDF)
+  /career-engine ofertas   → Compare and rank multiple offers
+  /career-engine contacto  → LinkedIn power move: find contacts + draft message
+  /career-engine deep      → Deep research prompt about company
+  /career-engine interview-prep → Generate company-specific interview prep doc
+  /career-engine pdf       → PDF only, ATS-optimized CV
+  /career-engine training  → Evaluate course/cert against North Star
+  /career-engine project   → Evaluate portfolio project idea
+  /career-engine tracker   → Application status overview
+  /career-engine apply     → Live application assistant (reads form + generates answers)
+  /career-engine scan      → Scan portals and discover new offers
+  /career-engine batch     → Batch processing with parallel workers
+  /career-engine patterns  → Analyze rejection patterns and improve targeting
+  /career-engine followup  → Follow-up cadence tracker: flag overdue, generate drafts
 
-Inbox: add URLs to data/pipeline.md → /career-ops pipeline
+Inbox: add URLs to data/pipeline.md → /career-engine pipeline
 Or paste a JD directly to run the full pipeline.
 ```
 
@@ -91,7 +91,7 @@ For `scan`, `apply` (with Playwright), and `pipeline` (3+ URLs): launch as Agent
 Agent(
   subagent_type="general-purpose",
   prompt="[content of modes/_shared.md]\n\n[content of modes/{mode}.md]\n\n[invocation-specific data]",
-  description="career-ops {mode}"
+  description="career-engine {mode}"
 )
 ```
 
