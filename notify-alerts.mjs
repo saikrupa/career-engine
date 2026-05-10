@@ -8,16 +8,22 @@ function isRemote(job) {
   return /remote|work from home|work anywhere|anywhere in (the )?(us|united states)/i.test(`${job.location || ''} ${job.locationPriority || ''} ${job.snippet || ''}`);
 }
 
+function isAndroidJob(job) {
+  return /android|kotlin|jetpack|compose|kmp|mobile engineer|mobile platform|sdk/i.test(`${job.title || ''} ${job.snippet || ''}`);
+}
+
 export function formatJobAlert(job) {
   const remote = isRemote(job);
   const fit = remote ? 'REMOTE PRIORITY - APPLY ASAP' : (job.locationPriority || job.fitLabel || job.fit || 'New match');
   const location = job.location ? ` | ${job.location}` : '';
   const source = job.source ? ` | ${job.source}` : '';
-  const score = typeof job.score === 'number' ? ` (${job.score}/100)` : '';
+  const hasScore = typeof job.score === 'number';
+  const scoreLine = hasScore ? `\nMatch score: ${job.score}%` : '\nMatch score: N/A';
   const posted = job.postedText ? `\nPosted: ${job.postedText}` : '';
   const easyApply = typeof job.easyApply === 'boolean' ? `\nEasy Apply: ${job.easyApply ? 'Yes' : 'No'}` : '';
-  const marker = remote ? '[REMOTE]' : '[MATCH]';
-  return `${marker} *${fit}${score}*\n${job.company || 'Unknown company'} - ${job.title || 'Untitled role'}${location}${source}${posted}${easyApply}\n${job.url}`;
+  const highPriorityRemoteAndroid = remote && isAndroidJob(job) && hasScore && job.score >= 60;
+  const marker = highPriorityRemoteAndroid ? '🚨🚨🚨 [REMOTE]' : (remote ? '[REMOTE]' : '[MATCH]');
+  return `${marker} *${fit}*\n${job.company || 'Unknown company'} - ${job.title || 'Untitled role'}${location}${source}${scoreLine}${posted}${easyApply}\n${job.url}`;
 }
 
 async function postJson(url, body, timeoutMs = DEFAULT_TIMEOUT_MS) {
@@ -44,8 +50,8 @@ export async function sendSlack(message, env = process.env) {
   if (!env.SLACK_WEBHOOK_URL) {
     return { channel: 'slack', skipped: true, reason: 'SLACK_WEBHOOK_URL missing' };
   }
-  await postJson(env.SLACK_WEBHOOK_URL, { text: message });
-  return { channel: 'slack', sent: true };
+  const response = await postJson(env.SLACK_WEBHOOK_URL, { text: message });
+  return { channel: 'slack', sent: true, response };
 }
 
 export async function sendTelegram(message, env = process.env) {
@@ -92,6 +98,7 @@ async function main() {
     fitLabel: 'REMOTE PRIORITY',
     locationPriority: 'REMOTE - jump on this',
   };
+  testJob.postedText = new Date().toISOString();
 
   const results = await notifyJobs([testJob], { dryRun });
   console.log(JSON.stringify(results, null, 2));

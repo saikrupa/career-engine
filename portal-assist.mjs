@@ -13,6 +13,8 @@ const PROFILE_ROOT = '.browser-profiles';
 const MAX_PAGES = 3;
 const DEFAULT_SCROLLS = 4;
 const DEFAULT_DETAIL_LIMIT = 25;
+const DEFAULT_ACTION_DELAY_MS = 1600;
+const DEFAULT_SEARCH_DELAY_MS = 3000;
 
 const US_SIGNALS = [
   'united states', 'usa', 'u.s.', ' us ', 'remote', 'texas', ' tx', 'dallas', 'plano',
@@ -87,6 +89,16 @@ export function normalizeUrl(url) {
 
 function cleanText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+export function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function randomDelay(baseMs) {
+  const base = Math.max(Number(baseMs || 0), 0);
+  if (base === 0) return 0;
+  return Math.round(base * (0.75 + Math.random() * 0.75));
 }
 
 export function isLikelyUsJob(job) {
@@ -448,8 +460,9 @@ async function login(portal) {
 }
 
 async function openContext(portal, options) {
+  const slowMo = Math.max(Number(options['slow-mo'] || 0), 0);
   if (options['storage-state']) {
-    const browser = await chromium.launch({ headless: false });
+    const browser = await chromium.launch({ headless: false, slowMo });
     const context = await browser.newContext({ storageState: String(options['storage-state']) });
     return { context, close: async () => browser.close() };
   }
@@ -457,12 +470,13 @@ async function openContext(portal, options) {
   mkdirSync(profileDir(portal), { recursive: true });
   const context = await chromium.launchPersistentContext(profileDir(portal), {
     headless: false,
+    slowMo,
     viewport: null,
   });
   return { context, close: async () => context.close() };
 }
 
-async function scrollResults(page, scrolls) {
+async function scrollResults(page, scrolls, actionDelayMs = DEFAULT_ACTION_DELAY_MS) {
   const selectors = [
     '.jobs-search-results-list',
     '.scaffold-layout__list',
@@ -481,8 +495,34 @@ async function scrollResults(page, scrolls) {
       }
     }
     if (!scrolled) await page.mouse.wheel(0, 3500).catch(() => {});
-    await page.waitForTimeout(1200);
+    await page.waitForTimeout(randomDelay(actionDelayMs));
   }
+}
+
+async function collectVisibleJobsDuringScroll(page, portal, scrolls, actionDelayMs) {
+  const jobsByUrl = new Map();
+  const rounds = Math.max(scrolls, 1);
+
+  for (let i = 0; i <= rounds; i += 1) {
+    const result = await page.evaluate(extractionScript(portal), portal);
+    for (const job of result.jobs) {
+      const normalizedUrl = normalizeUrl(job.url);
+      if (!jobsByUrl.has(normalizedUrl)) {
+        jobsByUrl.set(normalizedUrl, { ...job, url: normalizedUrl });
+      }
+    }
+
+    if (i < rounds) {
+      await scrollResults(page, 1, actionDelayMs);
+    }
+  }
+
+  const finalResult = await page.evaluate(extractionScript(portal), portal);
+  return {
+    pageTitle: finalResult.pageTitle,
+    pageUrl: finalResult.pageUrl,
+    jobs: [...jobsByUrl.values()],
+  };
 }
 
 async function extractDetailFromPage(page, portal) {
@@ -543,7 +583,7 @@ async function enrichLinkedInJob(page, job) {
     if (await locator.count().catch(() => 0)) {
       await locator.scrollIntoViewIfNeeded().catch(() => {});
       await locator.click({ timeout: 5000 }).catch(() => {});
-      await page.waitForTimeout(1400);
+      await page.waitForTimeout(randomDelay(DEFAULT_ACTION_DELAY_MS));
       const detail = await extractDetailFromPage(page, 'linkedin').catch(() => ({}));
       return mergeDetail(job, detail);
     }
@@ -552,7 +592,7 @@ async function enrichLinkedInJob(page, job) {
   const detailPage = await page.context().newPage();
   try {
     await detailPage.goto(job.url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
-    await detailPage.waitForTimeout(1800);
+    await detailPage.waitForTimeout(randomDelay(DEFAULT_ACTION_DELAY_MS));
     const detail = await extractDetailFromPage(detailPage, 'linkedin').catch(() => ({}));
     return mergeDetail(job, detail);
   } finally {
@@ -564,7 +604,7 @@ async function enrichIndeedJob(page, job) {
   const detailPage = await page.context().newPage();
   try {
     await detailPage.goto(job.url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
-    await detailPage.waitForTimeout(1800);
+    await detailPage.waitForTimeout(randomDelay(DEFAULT_ACTION_DELAY_MS));
     const detail = await extractDetailFromPage(detailPage, 'indeed').catch(() => ({}));
     return mergeDetail(job, detail);
   } finally {
@@ -648,6 +688,7 @@ export async function runCapture(portal, options) {
   const pages = Math.min(Math.max(Number(options.pages || 1), 1), MAX_PAGES);
   const scrolls = Math.max(Number(options.scrolls || DEFAULT_SCROLLS), 0);
   const detailLimit = Math.max(Number(options['detail-limit'] || DEFAULT_DETAIL_LIMIT), 0);
+  const actionDelayMs = Math.max(Number(options['action-delay-ms'] || DEFAULT_ACTION_DELAY_MS), 0);
   const dryRun = Boolean(options['dry-run']);
   const collectOnly = Boolean(options['collect-only']);
   const noNotify = Boolean(options['no-notify']);
@@ -659,12 +700,11 @@ export async function runCapture(portal, options) {
 
   try {
     await page.goto(options.url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-    await page.waitForTimeout(4000);
+    await page.waitForTimeout(randomDelay(Number(options['search-delay-ms'] || DEFAULT_SEARCH_DELAY_MS)));
 
     for (let pageNum = 1; pageNum <= pages; pageNum += 1) {
-      await scrollResults(page, scrolls);
-      const result = await page.evaluate(extractionScript(portal), portal);
-      console.log(`Captured ${result.jobs.length} visible cards from ${portal} page ${pageNum}: ${result.pageTitle}`);
+      const result = await collectVisibleJobsDuringScroll(page, portal, scrolls, actionDelayMs);
+      console.log(`Captured ${result.jobs.length} cards across scrolls from ${portal} page ${pageNum}: ${result.pageTitle}`);
       const detailedJobs = await enrichJobDetails(page, portal, result.jobs, detailLimit);
       rawJobs.push(...detailedJobs);
       if (pageNum < pages) {

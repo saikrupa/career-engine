@@ -22,6 +22,7 @@ const parseYaml = yaml.load;
 // ── Config ──────────────────────────────────────────────────────────
 
 const PORTALS_PATH = 'portals.yml';
+const PROFILE_PATH = 'config/profile.yml';
 const SCAN_HISTORY_PATH = 'data/scan-history.tsv';
 const PIPELINE_PATH = 'data/pipeline.md';
 const APPLICATIONS_PATH = 'data/applications.md';
@@ -81,6 +82,7 @@ function parseGreenhouse(json, companyName) {
     url: j.absolute_url || '',
     company: companyName,
     location: j.location?.name || '',
+    description: j.content || '',
   }));
 }
 
@@ -91,6 +93,7 @@ function parseAshby(json, companyName) {
     url: j.jobUrl || '',
     company: companyName,
     location: j.location || '',
+    description: j.descriptionHtml || j.descriptionPlain || j.description || '',
   }));
 }
 
@@ -101,6 +104,7 @@ function parseLever(json, companyName) {
     url: j.hostedUrl || '',
     company: companyName,
     location: j.categories?.location || '',
+    description: j.descriptionPlain || j.description || '',
   }));
 }
 
@@ -131,6 +135,127 @@ function buildTitleFilter(titleFilter) {
     const hasPositive = positive.length === 0 || positive.some(k => lower.includes(k));
     const hasNegative = negative.some(k => lower.includes(k));
     return hasPositive && !hasNegative;
+  };
+}
+
+// ── User preference filter ──────────────────────────────────────────
+
+function defaultScanPreferences() {
+  return {
+    enabled: false,
+    include_remote_us: true,
+    include_hybrid_dallas: true,
+    include_texas: true,
+    exclude_us_citizen_green_card_only: true,
+  };
+}
+
+function loadScanPreferences() {
+  if (!existsSync(PROFILE_PATH)) return defaultScanPreferences();
+
+  const profile = parseYaml(readFileSync(PROFILE_PATH, 'utf-8')) || {};
+  return {
+    ...defaultScanPreferences(),
+    ...(profile.scan?.location_preferences || {}),
+  };
+}
+
+function normalizeText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/&nbsp;/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function hasAny(text, patterns) {
+  return patterns.some(pattern => pattern.test(text));
+}
+
+function matchesRemoteUs(location) {
+  const text = normalizeText(location);
+  if (!/\b(remote|work from home|wfh)\b/.test(text)) return false;
+
+  return hasAny(text, [
+    /\b(us|u\.s\.|u\.s\.a\.|usa)\b/,
+    /\bunited states\b/,
+    /\bunited states of america\b/,
+    /\bamerica\b/,
+    /\bnorth america\b/,
+    /\banywhere in the us\b/,
+  ]);
+}
+
+function matchesHybridDallas(location) {
+  const text = normalizeText(location);
+  const isDallas = hasAny(text, [
+    /\bdallas\b/,
+    /\bdfw\b/,
+    /\bdallas[-\s]?fort worth\b/,
+    /\birving\b/,
+    /\bplano\b/,
+    /\bfrisco\b/,
+    /\brichardson\b/,
+    /\baddison\b/,
+  ]);
+
+  if (!isDallas) return false;
+  return /\b(hybrid|onsite|on-site|office|in office)\b/.test(text) || /\b(tx|texas)\b/.test(text);
+}
+
+function matchesTexas(location) {
+  const text = normalizeText(location);
+  return hasAny(text, [
+    /\btexas\b/,
+    /\btx\b/,
+    /\bdallas\b/,
+    /\bdfw\b/,
+    /\baustin\b/,
+    /\bhouston\b/,
+    /\bsan antonio\b/,
+    /\bfort worth\b/,
+    /\birving\b/,
+    /\bplano\b/,
+    /\bfrisco\b/,
+    /\brichardson\b/,
+    /\baddison\b/,
+  ]);
+}
+
+function isUsCitizenGreenCardOnly(job) {
+  const text = normalizeText(`${job.title} ${job.location} ${job.description}`);
+  return hasAny(text, [
+    /\b(us|u\.s\.|u\.s\.a\.|usa)\s+citizens?\s+only\b/,
+    /\bmust\s+be\s+(a\s+)?(us|u\.s\.|u\.s\.a\.|usa)\s+citizens?\b/,
+    /\b(?:citizenship|clearance)\s+required\b/,
+    /\bgreen\s+card\s+(holders?\s+)?only\b/,
+    /\b(us|u\.s\.|u\.s\.a\.|usa)\s+citizens?\s+or\s+green\s+card\s+holders?\s+only\b/,
+    /\bpermanent\s+residents?\s+only\b/,
+    /\bno\s+(c2c|corp\s*to\s*corp|visa\s+sponsorship|sponsorship)\b/,
+    /\bnot\s+offer(?:ing)?\s+visa\s+sponsorship\b/,
+    /\bunable\s+to\s+sponsor\b/,
+  ]);
+}
+
+function getLocationPriority(job, preferences) {
+  const location = job.location || '';
+  if (preferences.include_remote_us && matchesRemoteUs(location)) return 'P1';
+  if (preferences.include_hybrid_dallas && matchesHybridDallas(location)) return 'P2';
+  if (preferences.include_texas && matchesTexas(location)) return 'P3';
+  return null;
+}
+
+function buildPreferenceFilter(preferences) {
+  return (job) => {
+    if (!preferences.enabled) return { ok: true, priority: null };
+    if (preferences.exclude_us_citizen_green_card_only && isUsCitizenGreenCardOnly(job)) {
+      return { ok: false, reason: 'authorization' };
+    }
+
+    const priority = getLocationPriority(job, preferences);
+    if (!priority) return { ok: false, reason: 'location' };
+    return { ok: true, priority };
   };
 }
 
@@ -198,7 +323,7 @@ function appendToPipeline(offers) {
     const procIdx = text.indexOf('## Procesadas');
     const insertAt = procIdx === -1 ? text.length : procIdx;
     const block = `\n${marker}\n\n` + offers.map(o =>
-      `- [ ] ${o.url} | ${o.company} | ${o.title}`
+      `- [ ] ${o.url} | ${o.company} | ${o.title}${o.priority ? ` | ${o.priority}` : ''}`
     ).join('\n') + '\n\n';
     text = text.slice(0, insertAt) + block + text.slice(insertAt);
   } else {
@@ -208,7 +333,7 @@ function appendToPipeline(offers) {
     const insertAt = nextSection === -1 ? text.length : nextSection;
 
     const block = '\n' + offers.map(o =>
-      `- [ ] ${o.url} | ${o.company} | ${o.title}`
+      `- [ ] ${o.url} | ${o.company} | ${o.title}${o.priority ? ` | ${o.priority}` : ''}`
     ).join('\n') + '\n';
     text = text.slice(0, insertAt) + block + text.slice(insertAt);
   }
@@ -223,7 +348,7 @@ function appendToScanHistory(offers, date) {
   }
 
   const lines = offers.map(o =>
-    `${o.url}\t${date}\t${o.source}\t${o.title}\t${o.company}\tadded`
+    `${o.url}\t${date}\t${o.source}${o.priority ? ` ${o.priority}` : ''}\t${o.title}\t${o.company}\tadded`
   ).join('\n') + '\n';
 
   appendFileSync(SCAN_HISTORY_PATH, lines, 'utf-8');
@@ -264,6 +389,8 @@ async function main() {
   const config = parseYaml(readFileSync(PORTALS_PATH, 'utf-8'));
   const companies = config.tracked_companies || [];
   const titleFilter = buildTitleFilter(config.title_filter);
+  const scanPreferences = loadScanPreferences();
+  const preferenceFilter = buildPreferenceFilter(scanPreferences);
 
   // 2. Filter to enabled companies with detectable APIs
   const targets = companies
@@ -285,6 +412,8 @@ async function main() {
   const date = new Date().toISOString().slice(0, 10);
   let totalFound = 0;
   let totalFiltered = 0;
+  let totalLocationFiltered = 0;
+  let totalAuthorizationFiltered = 0;
   let totalDupes = 0;
   const newOffers = [];
   const errors = [];
@@ -301,6 +430,15 @@ async function main() {
           totalFiltered++;
           continue;
         }
+        const preferenceResult = preferenceFilter(job);
+        if (!preferenceResult.ok) {
+          if (preferenceResult.reason === 'authorization') {
+            totalAuthorizationFiltered++;
+          } else {
+            totalLocationFiltered++;
+          }
+          continue;
+        }
         if (seenUrls.has(job.url)) {
           totalDupes++;
           continue;
@@ -313,7 +451,7 @@ async function main() {
         // Mark as seen to avoid intra-scan dupes
         seenUrls.add(job.url);
         seenCompanyRoles.add(key);
-        newOffers.push({ ...job, source: `${type}-api` });
+        newOffers.push({ ...job, source: `${type}-api`, priority: preferenceResult.priority });
       }
     } catch (err) {
       errors.push({ company: company.name, error: err.message });
@@ -335,6 +473,10 @@ async function main() {
   console.log(`Companies scanned:     ${targets.length}`);
   console.log(`Total jobs found:      ${totalFound}`);
   console.log(`Filtered by title:     ${totalFiltered} removed`);
+  if (scanPreferences.enabled) {
+    console.log(`Filtered by location:  ${totalLocationFiltered} removed`);
+    console.log(`Auth-only excluded:    ${totalAuthorizationFiltered} removed`);
+  }
   console.log(`Duplicates:            ${totalDupes} skipped`);
   console.log(`New offers added:      ${newOffers.length}`);
 
@@ -348,7 +490,7 @@ async function main() {
   if (newOffers.length > 0) {
     console.log('\nNew offers:');
     for (const o of newOffers) {
-      console.log(`  + ${o.company} | ${o.title} | ${o.location || 'N/A'}`);
+      console.log(`  + ${o.company} | ${o.title} | ${o.location || 'N/A'}${o.priority ? ` | ${o.priority}` : ''}`);
     }
     if (dryRun) {
       console.log('\n(dry run — run without --dry-run to save results)');
