@@ -1,0 +1,9 @@
+Senior Android engineer with Kotlin-first development across modern Android architecture, Jetpack Compose UI, coroutines, clean architecture, modularization, and high-performance mobile delivery.
+
+Core strengths:
+- Kotlin, Android SDK, Jetpack Compose, MVVM/MVI
+- Coroutines, Flow, Room, Retrofit, DI (Hilt/Dagger)
+- Mobile platform engineering and app architecture modernization
+- Performance profiling, crash reduction, reliability, release quality
+- CI/CD for Android and developer experience improvements
+- AI-enabled mobile features and agent-assisted workflows where relevant

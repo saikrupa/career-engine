@@ -437,7 +437,7 @@ function parseArgs(args) {
 function usage() {
   console.log(`Usage:
   node portal-assist.mjs login linkedin|indeed
-  node portal-assist.mjs capture linkedin|indeed --url "<search-url>" [--pages 1] [--scrolls 4] [--detail-limit 25] [--storage-state storage/linkedin_state.json] [--dry-run] [--no-notify]
+  node portal-assist.mjs capture linkedin|indeed --url "<search-url>" [--pages 1] [--scrolls 4] [--detail-limit 25] [--storage-state storage/linkedin_state.json] [--headless true|false] [--dry-run] [--no-notify]
 `);
 }
 
@@ -459,19 +459,30 @@ async function login(portal) {
   await context.close().catch(() => {});
 }
 
+function boolOption(value, defaultValue = false) {
+  if (value === undefined) return defaultValue;
+  if (typeof value === 'boolean') return value;
+  return !/^(false|0|no|off)$/i.test(String(value));
+}
+
 async function openContext(portal, options) {
   const slowMo = Math.max(Number(options['slow-mo'] || 0), 0);
+  const headless = boolOption(options.headless, false) && !boolOption(options.headed, false);
+  const viewport = headless ? { width: 1440, height: 1000 } : null;
   if (options['storage-state']) {
-    const browser = await chromium.launch({ headless: false, slowMo });
-    const context = await browser.newContext({ storageState: String(options['storage-state']) });
+    const browser = await chromium.launch({ headless, slowMo });
+    const context = await browser.newContext({
+      storageState: String(options['storage-state']),
+      viewport,
+    });
     return { context, close: async () => browser.close() };
   }
 
   mkdirSync(profileDir(portal), { recursive: true });
   const context = await chromium.launchPersistentContext(profileDir(portal), {
-    headless: false,
+    headless,
     slowMo,
-    viewport: null,
+    viewport,
   });
   return { context, close: async () => context.close() };
 }

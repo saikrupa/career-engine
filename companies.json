@@ -1,0 +1,30 @@
+[
+  {
+    "company": "American Airlines",
+    "careers_url": "https://jobs.aa.com/"
+  },
+  {
+    "company": "Fidelity Investments",
+    "careers_url": "https://fidelity.wd5.myworkdayjobs.com/en-US/FIDELITY"
+  },
+  {
+    "company": "JPMorgan Chase",
+    "careers_url": "https://jpmc.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001/jobs"
+  },
+  {
+    "company": "Bank of America",
+    "careers_url": "https://bofa.eightfold.ai/careers"
+  },
+  {
+    "company": "Workday (self)",
+    "careers_url": "https://workday.wd5.myworkdayjobs.com/en-US/Workday"
+  },
+  {
+    "company": "Greenhouse demo",
+    "careers_url": "https://job-boards.greenhouse.io/greenhouse"
+  },
+  {
+    "company": "LangChain",
+    "careers_url": "https://jobs.ashbyhq.com/langchain"
+  }
+]

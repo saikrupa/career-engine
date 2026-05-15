@@ -39,6 +39,7 @@ storage/
 # Generated
 .resolved-prompt-*
 node_modules/
+.venv/
 bun.lock
 
 # OS

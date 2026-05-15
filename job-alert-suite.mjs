@@ -169,6 +169,7 @@ async function runOnce(options = {}) {
         'action-delay-ms': config.capture?.action_delay_ms || 1600,
         'search-delay-ms': config.capture?.search_delay_ms || 3000,
         'slow-mo': config.capture?.slow_mo || 0,
+        headless: config.capture?.headless ?? true,
         'storage-state': storageState,
         'collect-only': true,
         'dry-run': false,

@@ -1,0 +1,123 @@
+keywords:
+  - android
+  - kotlin
+  - jetpack compose
+  - mobile platform
+  - sdk
+  - kmp
+skills:
+  - android
+  - kotlin
+  - jetpack
+  - compose
+  - coroutines
+  - retrofit
+  - room
+  - kmp
+years_experience: 6
+target_roles:
+  - Senior Android Engineer
+  - Lead Mobile Engineer
+  - Mobile Platform Engineer
+  - Android Architecture Engineer
+
+thresholds:
+  apply: 75
+  save: 60
+
+runtime:
+  interval_minutes: 5
+  max_parallel_sources: 5
+  source_timeout_seconds: 45
+  dry_run_apply: true
+  safe_submit: false
+
+weights:
+  keyword: 35
+  skills: 30
+  experience: 25
+  llm: 10
+
+sources:
+  linkedin:
+    enabled: true
+    query: "Senior Android Engineer Kotlin"
+    location: "United States"
+    max_items: 30
+
+  indeed:
+    enabled: true
+    query: "Senior Android Engineer Kotlin"
+    location: "United States"
+    max_items: 30
+
+  greenhouse:
+    enabled: false
+    company: "Hightouch"
+    board: "hightouch"
+
+  lever:
+    enabled: false
+    company: "Vercel"
+    company_slug: "vercel"
+
+  workday:
+    enabled: true
+    company: "Workday"
+    base_url: "https://workday.wd5.myworkdayjobs.com/en-US/Workday"
+    endpoint: "https://workday.wd5.myworkdayjobs.com/wday/cxs/workday/Workday/jobs"
+    limit: 20
+    search: "Android"
+
+  llm:
+    enabled: false
+    provider: "ollama"
+    model: "llama3"
+    url: "http://localhost:11434/api/generate"
+
+relevance_filters:
+  include_any:
+    - android
+    - kotlin
+    - jetpack
+    - compose
+    - kmp
+    - mobile
+    - application developer
+    - sdk
+  exclude_any:
+    - ios
+    - swift
+    - flutter
+    - react native
+    - sales
+    - account executive
+    - designer
+    - product manager
+    - qa
+    - sdet
+  location_include_any:
+    - united states
+    - usa
+    - remote
+    - texas
+    - dallas
+    - dfw
+
+notifications:
+  slack:
+    webhook_url: ""
+
+  telegram:
+    bot_token: ""
+    chat_id: ""
+
+  email:
+    enabled: false
+    host: "smtp.gmail.com"
+    port: 587
+    username: ""
+    password: ""
+    from: ""
+    to: ""
+    subject: "Career Engine Alert"

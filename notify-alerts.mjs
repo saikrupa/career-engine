@@ -50,21 +50,29 @@ export async function sendSlack(message, env = process.env) {
   if (!env.SLACK_WEBHOOK_URL) {
     return { channel: 'slack', skipped: true, reason: 'SLACK_WEBHOOK_URL missing' };
   }
-  const response = await postJson(env.SLACK_WEBHOOK_URL, { text: message });
-  return { channel: 'slack', sent: true, response };
+  try {
+    const response = await postJson(env.SLACK_WEBHOOK_URL, { text: message });
+    return { channel: 'slack', sent: true, response };
+  } catch (err) {
+    return { channel: 'slack', sent: false, error: err.message };
+  }
 }
 
 export async function sendTelegram(message, env = process.env) {
   if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) {
     return { channel: 'telegram', skipped: true, reason: 'TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID missing' };
   }
-  const url = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`;
-  await postJson(url, {
-    chat_id: env.TELEGRAM_CHAT_ID,
-    text: message.replace(/\*/g, ''),
-    disable_web_page_preview: false,
-  });
-  return { channel: 'telegram', sent: true };
+  try {
+    const url = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`;
+    await postJson(url, {
+      chat_id: env.TELEGRAM_CHAT_ID,
+      text: message.replace(/\*/g, ''),
+      disable_web_page_preview: false,
+    });
+    return { channel: 'telegram', sent: true };
+  } catch (err) {
+    return { channel: 'telegram', sent: false, error: err.message };
+  }
 }
 
 export async function notifyJobs(jobs, options = {}) {
