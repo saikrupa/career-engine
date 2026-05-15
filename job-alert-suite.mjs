@@ -3,10 +3,10 @@
 import 'dotenv/config';
 import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
-import { spawn } from 'child_process';
 import yaml from 'js-yaml';
 import { appendToPipeline, appendToScanHistory, runCapture, sleep } from './portal-assist.mjs';
 import { notifyJobs } from './notify-alerts.mjs';
+import { generateTailoredResumesForJobs } from './generate-tailored-resumes.mjs';
 
 const CONFIG_PATH = 'config/job-alerts.yml';
 
@@ -118,20 +118,9 @@ function dedupeJobs(jobs) {
   return deduped.sort((a, b) => (a.locationRank ?? 99) - (b.locationRank ?? 99) || (b.score || 0) - (a.score || 0));
 }
 
-async function runCommand(command, args) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: 'inherit' });
-    child.on('error', reject);
-    child.on('close', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${command} ${args.join(' ')} exited with ${code}`));
-    });
-  });
-}
-
-async function generateTailoredResumesIfNeeded(config, newJobsCount) {
-  if (!config.actions?.generate_tailored_resumes || newJobsCount === 0) return;
-  await runCommand('node', ['generate-tailored-resumes.mjs']);
+async function attachTailoredResumesIfNeeded(config, jobs) {
+  if (!config.actions?.generate_tailored_resumes || jobs.length === 0) return null;
+  return generateTailoredResumesForJobs(jobs);
 }
 
 async function runOnce(options = {}) {
@@ -194,6 +183,13 @@ async function runOnce(options = {}) {
   const finalJobs = dedupeJobs(collected);
   totalNew = finalJobs.length;
 
+  if (!dryRun) {
+    const resumeResult = await attachTailoredResumesIfNeeded(config, finalJobs);
+    if (resumeResult) {
+      console.log(`Generated ${resumeResult.manifest.length} tailored resume PDF(s) for alerts.`);
+    }
+  }
+
   if (!dryRun && finalJobs.length > 0) {
     let historyWritten = false;
     if (config.actions?.add_to_pipeline) {
@@ -210,7 +206,6 @@ async function runOnce(options = {}) {
     }
   }
 
-  if (!dryRun) await generateTailoredResumesIfNeeded(config, totalNew);
   if (failures.length > 0) {
     console.log(`\nSkipped searches due to errors: ${failures.length}`);
     for (const failure of failures) {

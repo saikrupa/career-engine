@@ -7,26 +7,9 @@ import { chromium } from 'playwright';
 
 const root = process.cwd();
 const today = new Date().toISOString().slice(0, 10);
-const limitArg = process.argv.find((arg) => arg.startsWith('--limit='));
-const limit = limitArg ? Number(limitArg.split('=')[1]) : Infinity;
 
 const profile = yaml.load(fs.readFileSync(path.join(root, 'config/profile.yml'), 'utf8'));
 const template = fs.readFileSync(path.join(root, 'templates/cv-template.html'), 'utf8');
-const pipeline = fs.readFileSync(path.join(root, 'data/pipeline.md'), 'utf8');
-const outputDir = path.join(root, 'output', `tailored-${today}`);
-fs.mkdirSync(outputDir, { recursive: true });
-
-const pending = pipeline
-  .split(/\r?\n/)
-  .map((line) => line.match(/^- \[ \] (.+?) \| (.+?) \| (.+?)\s*$/))
-  .filter(Boolean)
-  .map((m) => ({ url: m[1], company: m[2].trim(), title: m[3].trim() }))
-  .slice(0, limit);
-
-if (pending.length === 0) {
-  console.log('No pending jobs found in data/pipeline.md');
-  process.exit(0);
-}
 
 const baseExperience = [
   {
@@ -134,6 +117,25 @@ function slug(value) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
     .slice(0, 70);
+}
+
+function filenameSlug(value) {
+  return slug(value).replace(/-/g, '_') || 'company';
+}
+
+function jobIdFromUrl(url, fallback) {
+  try {
+    const parsed = new URL(url);
+    const linkedInId = parsed.pathname.match(/\/jobs\/view\/(\d+)/)?.[1] || parsed.searchParams.get('currentJobId');
+    if (linkedInId) return linkedInId;
+    const indeedId = parsed.searchParams.get('jk') || parsed.searchParams.get('vjk');
+    if (indeedId) return indeedId;
+    const pathId = parsed.pathname.match(/(\d{5,})/)?.[1];
+    if (pathId) return pathId;
+  } catch {
+    // Fall back below.
+  }
+  return slug(fallback || 'job');
 }
 
 function pickKeywords(text, title) {
@@ -260,51 +262,96 @@ async function extractText(page, url) {
   }
 }
 
-const browser = await chromium.launch({ headless: true });
-const manifest = [];
-try {
-  const fetchPage = await browser.newPage();
-  for (let i = 0; i < pending.length; i++) {
-    const job = pending[i];
-    const base = `${slug(profile.candidate.full_name)}-${slug(job.company)}-${slug(job.title)}-${today}`;
-    const htmlPath = path.join(outputDir, `${base}.html`);
-    const pdfPath = path.join(outputDir, `${base}.pdf`);
-    process.stdout.write(`[${i + 1}/${pending.length}] ${job.company} - ${job.title} ... `);
-    const jd = await extractText(fetchPage, job.url);
-    const { html, keywords } = buildHtml(job, jd.ok ? jd.text : `${job.company} ${job.title}`);
-    fs.writeFileSync(htmlPath, html);
-    const pdfPage = await browser.newPage();
-    await pdfPage.setContent(html, { waitUntil: 'networkidle', baseURL: `file://${root}/` });
-    await pdfPage.evaluate(() => document.fonts.ready);
-    await pdfPage.pdf({
-      path: pdfPath,
-      format: 'letter',
-      printBackground: true,
-      margin: { top: '0.6in', right: '0.6in', bottom: '0.6in', left: '0.6in' },
-    });
-    await pdfPage.close();
-    manifest.push({
-      company: job.company,
-      title: job.title,
-      url: job.url,
-      jd_status: jd.ok ? 'fetched' : `fallback: ${jd.error || 'insufficient text'}`,
-      keywords: keywords.join('; '),
-      html: path.relative(root, htmlPath),
-      pdf: path.relative(root, pdfPath),
-    });
-    console.log(jd.ok ? 'done' : 'done (title fallback)');
-  }
-} finally {
-  await browser.close();
+function pendingJobsFromPipeline(limit = Infinity) {
+  const pipeline = fs.readFileSync(path.join(root, 'data/pipeline.md'), 'utf8');
+  return pipeline
+    .split(/\r?\n/)
+    .map((line) => line.match(/^- \[ \] (.+?) \| (.+?) \| (.+?)\s*$/))
+    .filter(Boolean)
+    .map((m) => ({ url: m[1], company: m[2].trim(), title: m[3].trim() }))
+    .slice(0, limit);
 }
 
-const manifestPath = path.join(outputDir, 'manifest.tsv');
-fs.writeFileSync(
-  manifestPath,
-  ['company\ttitle\turl\tjd_status\tkeywords\thtml\tpdf']
-    .concat(manifest.map((m) => [m.company, m.title, m.url, m.jd_status, m.keywords, m.html, m.pdf].map((v) => String(v).replace(/\t/g, ' ')).join('\t')))
-    .join('\n')
-);
+export async function generateTailoredResumesForJobs(jobs, options = {}) {
+  const outputDir = options.outputDir || path.join(root, 'output', `tailored-${today}`);
+  fs.mkdirSync(outputDir, { recursive: true });
+  const pending = jobs.slice(0, options.limit ?? Infinity);
 
-console.log(`\nGenerated ${manifest.length} tailored resume PDF(s).`);
-console.log(`Manifest: ${path.relative(root, manifestPath)}`);
+  if (pending.length === 0) {
+    return { outputDir, manifestPath: '', manifest: [] };
+  }
+
+  const browser = await chromium.launch({ headless: true });
+  const manifest = [];
+  try {
+    const fetchPage = await browser.newPage();
+    for (let i = 0; i < pending.length; i++) {
+      const job = pending[i];
+      const base = `${filenameSlug(job.company)}_${jobIdFromUrl(job.url, job.title)}`;
+      const htmlPath = path.join(outputDir, `${base}.html`);
+      const pdfPath = path.join(outputDir, `${base}.pdf`);
+      process.stdout.write(`[${i + 1}/${pending.length}] ${job.company} - ${job.title} ... `);
+      const jd = await extractText(fetchPage, job.url);
+      const { html, keywords } = buildHtml(job, jd.ok ? jd.text : `${job.company} ${job.title}`);
+      fs.writeFileSync(htmlPath, html);
+      const pdfPage = await browser.newPage();
+      await pdfPage.setContent(html, { waitUntil: 'networkidle', baseURL: `file://${root}/` });
+      await pdfPage.evaluate(() => document.fonts.ready);
+      await pdfPage.pdf({
+        path: pdfPath,
+        format: 'letter',
+        printBackground: true,
+        margin: { top: '0.6in', right: '0.6in', bottom: '0.6in', left: '0.6in' },
+      });
+      await pdfPage.close();
+      const item = {
+        company: job.company,
+        title: job.title,
+        url: job.url,
+        jd_status: jd.ok ? 'fetched' : `fallback: ${jd.error || 'insufficient text'}`,
+        keywords: keywords.join('; '),
+        html: path.relative(root, htmlPath),
+        pdf: path.relative(root, pdfPath),
+        htmlPath,
+        pdfPath,
+      };
+      job.resume = item;
+      manifest.push(item);
+      console.log(jd.ok ? 'done' : 'done (title fallback)');
+    }
+  } finally {
+    await browser.close();
+  }
+
+  const manifestPath = path.join(outputDir, 'manifest.tsv');
+  fs.writeFileSync(
+    manifestPath,
+    ['company\ttitle\turl\tjd_status\tkeywords\thtml\tpdf']
+      .concat(manifest.map((m) => [m.company, m.title, m.url, m.jd_status, m.keywords, m.html, m.pdf].map((v) => String(v).replace(/\t/g, ' ')).join('\t')))
+      .join('\n')
+  );
+
+  return { outputDir, manifestPath, manifest };
+}
+
+async function main() {
+  const limitArg = process.argv.find((arg) => arg.startsWith('--limit='));
+  const limit = limitArg ? Number(limitArg.split('=')[1]) : Infinity;
+  const pending = pendingJobsFromPipeline(limit);
+
+  if (pending.length === 0) {
+    console.log('No pending jobs found in data/pipeline.md');
+    return;
+  }
+
+  const result = await generateTailoredResumesForJobs(pending, { limit });
+  console.log(`\nGenerated ${result.manifest.length} tailored resume PDF(s).`);
+  console.log(`Manifest: ${path.relative(root, result.manifestPath)}`);
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((err) => {
+    console.error(`Resume generation failed: ${err.message}`);
+    process.exit(1);
+  });
+}
