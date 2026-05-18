@@ -64,11 +64,25 @@ function indeedSearchUrl(keyword, location, config) {
   return `https://www.indeed.com/jobs?${params.toString()}`;
 }
 
+function diceSearchUrl(keyword, location, config) {
+  const params = new URLSearchParams({
+    q: keyword,
+    location,
+  });
+  if (/remote/i.test(location)) {
+    params.set('filters.workplaceTypes', 'Remote');
+  }
+  const radius = searchRadiusForLocation(location, config);
+  if (radius) params.set('radius', String(radius));
+  return `https://www.dice.com/jobs?${params.toString()}`;
+}
+
 function buildSearches(config, portalFilter = null) {
   const searches = [];
   const enabledPortals = {
     linkedin: config.portals?.linkedin && (!portalFilter || portalFilter === 'linkedin'),
     indeed: config.portals?.indeed && (!portalFilter || portalFilter === 'indeed'),
+    dice: config.portals?.dice && (!portalFilter || portalFilter === 'dice'),
   };
   const locations = [
     ...(config.locations?.remote || []),
@@ -84,6 +98,9 @@ function buildSearches(config, portalFilter = null) {
       if (enabledPortals.indeed) {
         searches.push({ portal: 'indeed', keyword, location, url: indeedSearchUrl(keyword, location, config) });
       }
+      if (enabledPortals.dice) {
+        searches.push({ portal: 'dice', keyword, location, url: diceSearchUrl(keyword, location, config) });
+      }
     }
   }
 
@@ -94,10 +111,22 @@ function shouldKeepByScore(job, config) {
   const minScore = Number(config.thresholds?.default_min_score ?? 50);
   const text = `${job.title} ${job.snippet || ''}`;
   const title = String(job.title || '');
-  const androidRelated = /android|kotlin|jetpack|compose|kmp|mobile platform|mobile engineer/i.test(text);
-  const targetTitle = /android|kotlin|jetpack|compose|kmp|mobile|application developer|app developer|sdk|ai infrastructure|ai tooling/i.test(title);
-  const clearlyWrongTitle = /ios|swift|objective-c|flutter|react native|roblox|rails|elixir|erlang|\.net|java|designer|product manager|fitness trainer|mechanic|diesel|sales|account executive|test automation|sdet|qa|ux|ui engineer/i.test(title) && !/android|kotlin|kmp/i.test(title);
+  const mobileStack = /android|jetpack|compose|kmp|flutter|react[- ]native/i;
+  const androidRelated = /android|jetpack|compose|kmp/i.test(text) || (/kotlin/i.test(text) && /android|mobile/i.test(text));
+  const androidTitle = /android|jetpack|compose|kmp/i.test(title) || (/kotlin/i.test(title) && /android|mobile/i.test(text));
+  const mobileStackRelated = mobileStack.test(text) || (/kotlin/i.test(text) && /mobile/i.test(text));
+  const mobileStackTitle = mobileStack.test(title) || (/kotlin/i.test(title) && /mobile/i.test(title));
+  const targetTitle = /android|kotlin|jetpack|compose|kmp|flutter|react[- ]native|mobile|application developer|app developer|sdk|ai infrastructure|ai tooling/i.test(title);
+  const clearlyWrongTitle = /ios|swift|objective-c|roblox|rails|elixir|erlang|\.net|java|designer|product manager|fitness trainer|mechanic|diesel|sales|account executive|test automation|sdet|qa|ux|ui engineer/i.test(title) && !/android|kotlin|kmp|flutter|react[- ]native/i.test(title);
 
+  if (job.source === 'dice') {
+    if (!mobileStackRelated || !mobileStackTitle) return false;
+  } else if (!androidRelated) {
+    return false;
+  }
+
+  if (job.source === 'dice' && !androidTitle && !mobileStackTitle) return false;
+  if (/intern|new grad/i.test(title)) return false;
   if (clearlyWrongTitle) return false;
   if (!targetTitle) return false;
   if (config.thresholds?.alert_all_android && androidRelated) {
@@ -123,11 +152,19 @@ async function attachTailoredResumesIfNeeded(config, jobs) {
   return generateTailoredResumesForJobs(jobs);
 }
 
+function applyNotificationRouting(config, jobs) {
+  const slackChannelByPortal = config.notifications?.slack_channel_by_portal || {};
+  for (const job of jobs) {
+    const channel = slackChannelByPortal[job.source];
+    if (channel) job.slackChannelId = channel;
+  }
+}
+
 async function runOnce(options = {}) {
   const config = await loadConfig();
   const portalFilter = options.portal ? String(options.portal).toLowerCase() : null;
-  if (portalFilter && !['linkedin', 'indeed'].includes(portalFilter)) {
-    throw new Error('--portal must be linkedin or indeed');
+  if (portalFilter && !['linkedin', 'indeed', 'dice'].includes(portalFilter)) {
+    throw new Error('--portal must be linkedin, indeed, or dice');
   }
   let searches = buildSearches(config, portalFilter);
   if (options['limit-searches']) {
@@ -181,6 +218,7 @@ async function runOnce(options = {}) {
   }
 
   const finalJobs = dedupeJobs(collected);
+  applyNotificationRouting(config, finalJobs);
   totalNew = finalJobs.length;
 
   if (!dryRun) {

@@ -80,6 +80,12 @@ export function normalizeUrl(url) {
       const jk = parsed.searchParams.get('jk') || parsed.searchParams.get('vjk');
       if (jk) return `https://www.indeed.com/viewjob?jk=${jk}`;
     }
+    if (parsed.hostname.includes('dice.com')) {
+      const jobId = parsed.pathname.match(/\/job-detail\/[^/?#]+\/([^/?#]+)/)?.[1] ||
+        parsed.searchParams.get('jobId') ||
+        parsed.searchParams.get('id');
+      if (jobId) return `https://www.dice.com/job-detail/${jobId}`;
+    }
     parsed.hash = '';
     return parsed.toString();
   } catch {
@@ -89,6 +95,10 @@ export function normalizeUrl(url) {
 
 function cleanText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function isPlaceholderCompany(value) {
+  return /^(company logo|unknown company|logo)$/i.test(cleanText(value));
 }
 
 export function sleep(ms) {
@@ -167,6 +177,7 @@ function jobKey(job) {
 export function extractionScript(portal) {
   return (portalName) => {
     const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+    const isPlaceholderCompanyText = (value) => /^(company logo|unknown company|logo)$/i.test(clean(value));
     const absolute = (href) => {
       try {
         return new URL(href, location.href).toString();
@@ -232,6 +243,31 @@ export function extractionScript(portal) {
         ],
         posted: ['[data-testid="myJobsStateDate"]', '.date', '[class*="date"]'],
       },
+      dice: {
+        card: [
+          '[data-testid="job-card"]', '[data-cy="search-card"]', '[data-testid="job-search-card"]', 'dhi-search-card',
+          '.card', 'article', 'li',
+        ],
+        title: [
+          '[data-testid="job-search-job-detail-link"]',
+          'a[href*="/job-detail/"]', '[data-cy="card-title-link"]', '[data-testid="job-title"]',
+          'h5 a', 'h2 a', 'a',
+        ],
+        url: ['[data-testid="job-search-job-detail-link"]', 'a[href*="/job-detail/"]', 'a[href*="/jobs/detail/"]', 'a[href*="/job/"]'],
+        company: [
+          'a[href*="/company-profile/"]',
+          '[data-cy="search-result-company-name"]', '[data-testid="company-name"]',
+          '.card-company', '[class*="company"]',
+        ],
+        location: [
+          '[data-cy="search-result-location"]', '[data-testid="search-result-location"]',
+          '[class*="location"]',
+        ],
+        posted: [
+          '[data-cy="card-posted-date"]', '[data-testid="posted-date"]',
+          'time', '[class*="posted"]', '[class*="date"]',
+        ],
+      },
     };
 
     const cfg = configs[portalName];
@@ -248,10 +284,23 @@ export function extractionScript(portal) {
       if (seen.has(key)) continue;
       seen.add(key);
 
-      const company = pickText(card, cfg.company) || 'Unknown company';
-      const locationText = pickText(card, cfg.location);
-      const postedText = pickText(card, cfg.posted);
-      const snippet = clean(card.innerText).slice(0, 700);
+      const rawText = String(card.innerText || card.textContent || '');
+      const snippet = clean(rawText).slice(0, 700);
+      const lines = rawText.split(/\n+/).map(clean).filter(Boolean);
+      const diceTitleIndex = portalName === 'dice' ? lines.findIndex((line) => line === title) : -1;
+      const diceMeta = portalName === 'dice' && diceTitleIndex > 0
+        ? {
+            company: lines[0],
+            location: lines[diceTitleIndex + 1] || '',
+            posted: lines[diceTitleIndex + 3] || '',
+          }
+        : {};
+      const pickedCompany = pickText(card, cfg.company);
+      const company = portalName === 'dice'
+        ? (diceMeta.company || (isPlaceholderCompanyText(pickedCompany) ? '' : pickedCompany) || 'Unknown company')
+        : (pickedCompany || 'Unknown company');
+      const locationText = pickText(card, cfg.location) || diceMeta.location || '';
+      const postedText = pickText(card, cfg.posted) || diceMeta.posted || '';
       jobs.push({
         title,
         company,
@@ -285,7 +334,9 @@ export function parseJobsFromFixtureHtml(portal, html, baseUrl = 'https://exampl
   const seen = new Set();
   const linkPattern = portal === 'linkedin'
     ? /<a[^>]+href=["']([^"']*\/jobs\/view\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi
-    : /<a[^>]+href=["']([^"']*(?:\/viewjob|\?jk=)[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi;
+    : portal === 'dice'
+      ? /<a[^>]+href=["']([^"']*\/job-detail\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi
+      : /<a[^>]+href=["']([^"']*(?:\/viewjob|\?jk=)[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi;
 
   for (const linkMatch of html.matchAll(linkPattern)) {
     const start = Math.max(0, linkMatch.index - 900);
@@ -436,8 +487,8 @@ function parseArgs(args) {
 
 function usage() {
   console.log(`Usage:
-  node portal-assist.mjs login linkedin|indeed
-  node portal-assist.mjs capture linkedin|indeed --url "<search-url>" [--pages 1] [--scrolls 4] [--detail-limit 25] [--storage-state storage/linkedin_state.json] [--headless true|false] [--dry-run] [--no-notify]
+  node portal-assist.mjs login linkedin|indeed|dice
+  node portal-assist.mjs capture linkedin|indeed|dice --url "<search-url>" [--pages 1] [--scrolls 4] [--detail-limit 25] [--storage-state storage/linkedin_state.json] [--headless true|false] [--dry-run] [--no-notify]
 `);
 }
 
@@ -452,7 +503,11 @@ async function login(portal) {
     viewport: null,
   });
   const page = context.pages()[0] || await context.newPage();
-  const home = portal === 'linkedin' ? 'https://www.linkedin.com/login' : 'https://www.indeed.com/account/login';
+  const home = portal === 'linkedin'
+    ? 'https://www.linkedin.com/login'
+    : portal === 'indeed'
+      ? 'https://www.indeed.com/account/login'
+      : 'https://www.dice.com/dashboard/login';
   await page.goto(home, { waitUntil: 'domcontentloaded' });
   console.log(`Log in to ${portal} in the opened browser. Close the browser window when you are done.`);
   await page.waitForEvent('close', { timeout: 0 }).catch(() => {});
@@ -566,6 +621,12 @@ async function extractDetailFromPage(page, portal) {
         location: ['[data-testid="job-location"]', '[data-testid="inlineHeader-companyLocation"]', '#jobLocationText', '.jobsearch-JobInfoHeader-subtitle'],
         description: ['#jobDescriptionText', '[data-testid="jobsearch-JobComponent-description"]'],
       },
+      dice: {
+        title: ['[data-cy="jobTitle"]', '[data-testid="job-title"]', 'h1'],
+        company: ['[data-cy="companyName"]', '[data-testid="company-name"]', '[class*="company"]'],
+        location: ['[data-cy="location"]', '[data-testid="job-location"]', '[class*="location"]'],
+        description: ['[data-cy="jobDescription"]', '[data-testid="job-description"]', '#jobdescSec', '[class*="description"]'],
+      },
     };
 
     const cfg = configs[portalName];
@@ -623,9 +684,21 @@ async function enrichIndeedJob(page, job) {
   }
 }
 
+async function enrichDiceJob(page, job) {
+  const detailPage = await page.context().newPage();
+  try {
+    await detailPage.goto(job.url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+    await detailPage.waitForTimeout(randomDelay(DEFAULT_ACTION_DELAY_MS));
+    const detail = await extractDetailFromPage(detailPage, 'dice').catch(() => ({}));
+    return mergeDetail(job, detail);
+  } finally {
+    await detailPage.close().catch(() => {});
+  }
+}
+
 function locationFromDetail(detailLocation, fallbackLocation) {
   const cleaned = cleanText(detailLocation);
-  if (!cleaned) return fallbackLocation;
+  if (!cleaned || /^n\/?a$/i.test(cleaned)) return fallbackLocation;
   const parts = cleaned
     .split(/\s{2,}| · | \| |\n/)
     .map(cleanText)
@@ -639,10 +712,11 @@ function locationFromDetail(detailLocation, fallbackLocation) {
 function mergeDetail(job, detail = {}) {
   const detailLocation = locationFromDetail(detail.detailLocation, job.location);
   const snippet = cleanText(`${detail.description || ''} ${detail.snippet || ''} ${job.snippet || ''}`).slice(0, 2500);
+  const detailCompany = cleanText(detail.company);
   return {
     ...job,
     title: cleanText(detail.title) || job.title,
-    company: cleanText(detail.company) || job.company,
+    company: detailCompany && !isPlaceholderCompany(detailCompany) ? detailCompany : job.company,
     location: detailLocation || job.location,
     detailLocation: cleanText(detail.detailLocation),
     snippet,
@@ -662,7 +736,9 @@ async function enrichJobDetails(page, portal, jobs, detailLimit) {
     try {
       const detailed = portal === 'linkedin'
         ? await enrichLinkedInJob(page, job)
-        : await enrichIndeedJob(page, job);
+        : portal === 'dice'
+          ? await enrichDiceJob(page, job)
+          : await enrichIndeedJob(page, job);
       enriched.push(detailed);
     } catch {
       enriched.push(job);
@@ -677,6 +753,12 @@ async function clickNext(page, portal) {
         page.getByRole('button', { name: /^next/i }).last(),
         page.locator('button[aria-label*="Next"]').last(),
       ]
+    : portal === 'dice'
+      ? [
+          page.getByRole('link', { name: /^next/i }).last(),
+          page.getByRole('button', { name: /^next/i }).last(),
+          page.locator('a[aria-label*="Next"],button[aria-label*="Next"]').last(),
+        ]
     : [
         page.getByRole('link', { name: /^next/i }).last(),
         page.locator('a[aria-label*="Next"]').last(),
@@ -755,7 +837,7 @@ async function main() {
   const command = args._[0];
   const portal = args._[1];
 
-  if (!['login', 'capture'].includes(command) || !['linkedin', 'indeed'].includes(portal)) {
+  if (!['login', 'capture'].includes(command) || !['linkedin', 'indeed', 'dice'].includes(portal)) {
     usage();
     process.exit(1);
   }

@@ -130,6 +130,10 @@ function jobIdFromUrl(url, fallback) {
     if (linkedInId) return linkedInId;
     const indeedId = parsed.searchParams.get('jk') || parsed.searchParams.get('vjk');
     if (indeedId) return indeedId;
+    const diceId = parsed.hostname.includes('dice.com')
+      ? parsed.pathname.match(/\/job-detail\/([^/?#]+)$/)?.[1]
+      : '';
+    if (diceId) return filenameSlug(diceId);
     const pathId = parsed.pathname.match(/(\d{5,})/)?.[1];
     if (pathId) return pathId;
   } catch {

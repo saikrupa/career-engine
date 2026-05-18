@@ -201,16 +201,17 @@ export async function notifyJobs(jobs, options = {}) {
   const results = [];
 
   for (const job of jobs) {
+    const jobEnv = job.slackChannelId ? { ...env, SLACK_CHANNEL_ID: job.slackChannelId } : env;
     const message = formatJobAlert(job);
     if (dryRun) {
       results.push({ channel: 'dry-run', message });
       continue;
     }
-    results.push(await sendSlack(message, env));
+    results.push(await sendSlack(message, jobEnv));
     results.push(await sendTelegram(message, env));
     if (job.resume?.pdfPath) {
       const caption = `Resume for ${job.company || 'Unknown company'} - ${job.title || 'Untitled role'}`;
-      results.push(await sendSlackDocument(job.resume.pdfPath, caption, env));
+      results.push(await sendSlackDocument(job.resume.pdfPath, caption, jobEnv));
       results.push(await sendTelegramDocument(job.resume.pdfPath, caption, env));
     }
   }
@@ -225,11 +226,12 @@ async function main() {
     company: 'Career Engine Test',
     title: 'Senior Android / AI Agents Engineer',
     location: 'Remote - United States',
-    source: 'notification-test',
+    source: 'dice',
     url: 'https://example.com/job',
     score: 95,
     fitLabel: 'REMOTE PRIORITY',
     locationPriority: 'REMOTE - jump on this',
+    slackChannelId: 'C0B4A7N90GK',
   };
   testJob.postedText = new Date().toISOString();
 

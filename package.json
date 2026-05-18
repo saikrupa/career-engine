@@ -21,6 +21,8 @@
     "scan:linkedin:dry-run": "node job-alert-suite.mjs once --portal linkedin --dry-run",
     "scan:indeed": "node job-alert-suite.mjs once --portal indeed",
     "scan:indeed:dry-run": "node job-alert-suite.mjs once --portal indeed --dry-run",
+    "scan:dice": "node job-alert-suite.mjs once --portal dice",
+    "scan:dice:dry-run": "node job-alert-suite.mjs once --portal dice --dry-run",
     "gemini:eval": "node gemini-eval.mjs",
     "portal:login": "node portal-assist.mjs login",
     "portal:capture": "node portal-assist.mjs capture",
