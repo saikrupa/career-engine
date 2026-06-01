@@ -112,9 +112,15 @@ LinkedIn searches use these locations:
 LinkedIn search keywords:
 
 - `Senior Android Engineer Kotlin`
-- `Mobile Platform Android`
-- `Android Kotlin Jetpack Compose`
+- `Android Developer Kotlin`
+- `Android Engineer Jetpack Compose`
+- `Mobile Android Engineer`
 - `Android SDK Engineer`
+- `Android Platform Engineer`
+- `Kotlin Multiplatform Android`
+- `Lead Android Developer`
+- `Android Architect`
+- `Android Architecture Engineer`
 
 LinkedIn URL-level filters:
 
@@ -355,4 +361,3 @@ Before running scans:
 4. Prefer `npm run scan:linkedin` over combined LinkedIn+Indeed.
 5. Use `npm run notify:test` after changing notification formatting.
 6. Run `npm run verify` after editing pipeline/tracker data.
-

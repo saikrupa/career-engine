@@ -1,0 +1,100 @@
+# Personal job alert suite config. Copy to config/job-alerts.yml or use `npm run setup`.
+# This file is safe to commit because it contains placeholders only.
+
+enabled: true
+interval_minutes: 30
+
+active_countries:
+  - us
+  - india
+
+portals:
+  linkedin: true
+  indeed: true
+  dice: true
+  naukri: false
+
+country_portals:
+  us: [linkedin, indeed, dice]
+  india: [linkedin, indeed, naukri]
+
+session:
+  # Optional. Prefer `npm run portal:login -- linkedin` for a local browser profile.
+  # If you export Playwright storage state, keep it in .auth/ or storage/ because both are gitignored.
+  linkedin_storage_state: ""
+
+locations:
+  remote:
+    - "Remote United States"
+  local:
+    - "Dallas, TX"
+  texas:
+    - "Texas"
+
+country_locations:
+  us:
+    - "Remote United States"
+    - "Dallas, TX"
+    - "Texas"
+  india:
+    - "Remote India"
+    - "Bengaluru, India"
+    - "Hyderabad, India"
+
+search_radius:
+  dallas_miles: 80
+  texas_miles: null
+  default_miles: null
+
+keywords:
+  - "Senior Android Engineer Kotlin"
+  - "Android Developer Kotlin"
+  - "Android Engineer Jetpack Compose"
+  - "Mobile Android Engineer"
+  - "Android SDK Engineer"
+  - "Android Platform Engineer"
+  - "Kotlin Multiplatform Android"
+  - "Lead Android Developer"
+  - "Android Architect"
+  - "Android Architecture Engineer"
+
+thresholds:
+  default_min_score: 50
+  alert_all_android: false
+
+actions:
+  add_to_pipeline: true
+  notify: true
+  generate_tailored_resumes: true
+
+notifications:
+  slack_channel_by_portal: {}
+
+capture:
+  headless: true
+  pages: 1
+  scrolls: 4
+  detail_limit: 10
+  search_delay_ms: 3000
+  action_delay_ms: 1600
+  between_search_delay_ms: 3500
+  slow_mo: 0
+  portal_overrides:
+    indeed:
+      headless: false
+      pages: 1
+      scrolls: 2
+      search_delay_ms: 4500
+      action_delay_ms: 2200
+      slow_mo: 200
+    naukri:
+      headless: false
+      pages: 1
+      scrolls: 3
+      search_delay_ms: 4500
+      action_delay_ms: 2200
+      slow_mo: 200
+
+validation:
+  require_portal_login: true
+  skip_unconfigured_portals: true

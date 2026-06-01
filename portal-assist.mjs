@@ -23,9 +23,8 @@ const US_SIGNALS = [
   'north carolina', ' nc', 'florida', ' fl', 'colorado', ' co', 'arizona', ' az',
 ];
 
-const NON_US_SIGNALS = [
-  'canada', 'toronto', 'vancouver', 'montreal', 'india', 'bengaluru', 'bangalore',
-  'hyderabad', 'pune', 'chennai', 'mumbai', 'united kingdom', 'uk', 'london',
+const NON_TARGET_LOCATION_SIGNALS = [
+  'canada', 'toronto', 'vancouver', 'montreal', 'united kingdom', 'uk', 'london',
   'germany', 'berlin', 'munich', 'france', 'paris', 'netherlands', 'amsterdam',
   'ireland', 'dublin', 'spain', 'madrid', 'portugal', 'lisbon', 'poland',
   'warsaw', 'brazil', 'argentina', 'mexico', 'australia', 'sydney', 'japan',
@@ -66,6 +65,18 @@ const LOCATION_PRIORITIES = [
     label: 'A2 Texas',
     rank: 2,
     terms: ['texas', ' tx', 'austin', 'houston', 'san antonio'],
+  },
+  {
+    key: 'remote-india',
+    label: 'REMOTE India',
+    rank: 3,
+    terms: ['remote india', 'work from home india', 'anywhere in india'],
+  },
+  {
+    key: 'india',
+    label: 'India',
+    rank: 4,
+    terms: ['india', 'bengaluru', 'bangalore', 'hyderabad', 'pune', 'chennai', 'mumbai', 'gurugram', 'gurgaon', 'noida', 'delhi'],
   },
 ];
 
@@ -111,17 +122,43 @@ function randomDelay(baseMs) {
   return Math.round(base * (0.75 + Math.random() * 0.75));
 }
 
+function looksLikeBotChallenge(text) {
+  const hay = cleanText(text).toLowerCase();
+  if (!hay) return false;
+  return [
+    'verify you are human',
+    'verify you\'re human',
+    'unusual traffic',
+    'captcha',
+    'access denied',
+    'automated queries',
+    'for security reasons',
+    'request blocked',
+    'robot check',
+  ].some((needle) => hay.includes(needle));
+}
+
+async function ensureNotBlocked(page, portal) {
+  const snapshot = await page.evaluate(() => ({
+    title: document.title || '',
+    body: (document.body?.innerText || '').slice(0, 4000),
+  })).catch(() => ({ title: '', body: '' }));
+  if (looksLikeBotChallenge(`${snapshot.title} ${snapshot.body}`)) {
+    throw new Error(`${portal} blocked the automated session (captcha/bot challenge). Re-login with npm run portal:login -- ${portal} and retry later.`);
+  }
+}
+
 export function isLikelyUsJob(job) {
   const location = ` ${cleanText(job.location).toLowerCase()} `;
   const haystack = ` ${cleanText(`${job.location} ${job.title} ${job.snippet}`).toLowerCase()} `;
 
-  if (NON_US_SIGNALS.some((term) => haystack.includes(term))) return false;
+  if (NON_TARGET_LOCATION_SIGNALS.some((term) => haystack.includes(term))) return false;
   return US_SIGNALS.some((term) => location.includes(term) || haystack.includes(term));
 }
 
 export function classifyLocation(job) {
   const haystack = ` ${cleanText(`${job.location} ${job.detailLocation || ''} ${job.snippet}`).toLowerCase()} `;
-  if (NON_US_SIGNALS.some((term) => haystack.includes(term))) {
+  if (NON_TARGET_LOCATION_SIGNALS.some((term) => haystack.includes(term))) {
     return { accepted: false, priority: 'OUT', rank: 99, reason: 'Non-US location signal' };
   }
 
@@ -266,6 +303,26 @@ export function extractionScript(portal) {
         posted: [
           '[data-cy="card-posted-date"]', '[data-testid="posted-date"]',
           'time', '[class*="posted"]', '[class*="date"]',
+        ],
+      },
+      naukri: {
+        card: [
+          '.srp-jobtuple-wrapper', '.jobTuple', '.cust-job-tuple', 'article', 'div[class*="jobTuple"]',
+          'div[class*="job-tuple"]',
+        ],
+        title: [
+          'a.title', 'a[class*="title"]', 'a[href*="/job-listings-"]', 'a[href*="-jobs-"]',
+          '.title',
+        ],
+        url: ['a.title', 'a[class*="title"]', 'a[href*="/job-listings-"]', 'a[href*="-jobs-"]'],
+        company: [
+          'a.comp-name', '.comp-name', '[class*="company"]', '[class*="comp"]',
+        ],
+        location: [
+          '.locWdth', '[title*="location"]', '[class*="loc"]', '[class*="location"]',
+        ],
+        posted: [
+          '.job-post-day', '[class*="posted"]', '[class*="date"]',
         ],
       },
     };
@@ -507,7 +564,9 @@ async function login(portal) {
     ? 'https://www.linkedin.com/login'
     : portal === 'indeed'
       ? 'https://www.indeed.com/account/login'
-      : 'https://www.dice.com/dashboard/login';
+      : portal === 'dice'
+        ? 'https://www.dice.com/dashboard/login'
+        : 'https://www.naukri.com/nlogin/login';
   await page.goto(home, { waitUntil: 'domcontentloaded' });
   console.log(`Log in to ${portal} in the opened browser. Close the browser window when you are done.`);
   await page.waitForEvent('close', { timeout: 0 }).catch(() => {});
@@ -551,16 +610,23 @@ async function scrollResults(page, scrolls, actionDelayMs = DEFAULT_ACTION_DELAY
   ];
 
   for (let i = 0; i < scrolls; i += 1) {
+    await page.mouse.move(350 + Math.random() * 500, 180 + Math.random() * 500, { steps: 8 }).catch(() => {});
     let scrolled = false;
     for (const selector of selectors) {
       const locator = page.locator(selector).first();
       if (await locator.count().catch(() => 0)) {
-        await locator.evaluate((el) => el.scrollTo(0, el.scrollHeight)).catch(() => {});
+        await locator.hover().catch(() => {});
+        await locator.evaluate((el) => el.scrollBy(0, Math.max(500, Math.round(el.clientHeight * 0.85)))).catch(() => {});
         scrolled = true;
         break;
       }
     }
-    if (!scrolled) await page.mouse.wheel(0, 3500).catch(() => {});
+    if (!scrolled) {
+      for (let step = 0; step < 4; step += 1) {
+        await page.mouse.wheel(0, 650 + Math.random() * 350).catch(() => {});
+        await page.waitForTimeout(randomDelay(Math.max(actionDelayMs / 4, 250)));
+      }
+    }
     await page.waitForTimeout(randomDelay(actionDelayMs));
   }
 }
@@ -626,6 +692,12 @@ async function extractDetailFromPage(page, portal) {
         company: ['[data-cy="companyName"]', '[data-testid="company-name"]', '[class*="company"]'],
         location: ['[data-cy="location"]', '[data-testid="job-location"]', '[class*="location"]'],
         description: ['[data-cy="jobDescription"]', '[data-testid="job-description"]', '#jobdescSec', '[class*="description"]'],
+      },
+      naukri: {
+        title: ['h1', '.jd-header-title', '[class*="title"]'],
+        company: ['.jd-header-comp-name', '[class*="company"]', '[class*="comp"]'],
+        location: ['.location', '[class*="location"]', '[class*="loc"]'],
+        description: ['.dang-inner-html', '.job-desc', '[class*="description"]', '[class*="detail"]'],
       },
     };
 
@@ -696,6 +768,18 @@ async function enrichDiceJob(page, job) {
   }
 }
 
+async function enrichNaukriJob(page, job) {
+  const detailPage = await page.context().newPage();
+  try {
+    await detailPage.goto(job.url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+    await detailPage.waitForTimeout(randomDelay(DEFAULT_ACTION_DELAY_MS));
+    const detail = await extractDetailFromPage(detailPage, 'naukri').catch(() => ({}));
+    return mergeDetail(job, detail);
+  } finally {
+    await detailPage.close().catch(() => {});
+  }
+}
+
 function locationFromDetail(detailLocation, fallbackLocation) {
   const cleaned = cleanText(detailLocation);
   if (!cleaned || /^n\/?a$/i.test(cleaned)) return fallbackLocation;
@@ -738,7 +822,9 @@ async function enrichJobDetails(page, portal, jobs, detailLimit) {
         ? await enrichLinkedInJob(page, job)
         : portal === 'dice'
           ? await enrichDiceJob(page, job)
-          : await enrichIndeedJob(page, job);
+          : portal === 'naukri'
+            ? await enrichNaukriJob(page, job)
+            : await enrichIndeedJob(page, job);
       enriched.push(detailed);
     } catch {
       enriched.push(job);
@@ -753,7 +839,7 @@ async function clickNext(page, portal) {
         page.getByRole('button', { name: /^next/i }).last(),
         page.locator('button[aria-label*="Next"]').last(),
       ]
-    : portal === 'dice'
+    : portal === 'dice' || portal === 'naukri'
       ? [
           page.getByRole('link', { name: /^next/i }).last(),
           page.getByRole('button', { name: /^next/i }).last(),
@@ -794,6 +880,7 @@ export async function runCapture(portal, options) {
   try {
     await page.goto(options.url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
     await page.waitForTimeout(randomDelay(Number(options['search-delay-ms'] || DEFAULT_SEARCH_DELAY_MS)));
+    await ensureNotBlocked(page, portal);
 
     for (let pageNum = 1; pageNum <= pages; pageNum += 1) {
       const result = await collectVisibleJobsDuringScroll(page, portal, scrolls, actionDelayMs);
@@ -803,6 +890,7 @@ export async function runCapture(portal, options) {
       if (pageNum < pages) {
         const moved = await clickNext(page, portal);
         if (!moved) break;
+        await ensureNotBlocked(page, portal);
       }
     }
   } finally {
@@ -837,7 +925,7 @@ async function main() {
   const command = args._[0];
   const portal = args._[1];
 
-  if (!['login', 'capture'].includes(command) || !['linkedin', 'indeed', 'dice'].includes(portal)) {
+  if (!['login', 'capture'].includes(command) || !['linkedin', 'indeed', 'dice', 'naukri'].includes(portal)) {
     usage();
     process.exit(1);
   }

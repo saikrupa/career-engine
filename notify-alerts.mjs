@@ -231,7 +231,7 @@ async function main() {
     score: 95,
     fitLabel: 'REMOTE PRIORITY',
     locationPriority: 'REMOTE - jump on this',
-    slackChannelId: 'C0B4A7N90GK',
+    slackChannelId: process.env.SLACK_CHANNEL_ID,
   };
   testJob.postedText = new Date().toISOString();
 

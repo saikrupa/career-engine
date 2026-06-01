@@ -2,13 +2,16 @@
 
 import 'dotenv/config';
 import { existsSync } from 'fs';
-import { readFile } from 'fs/promises';
+import { mkdir, readFile, writeFile } from 'fs/promises';
 import yaml from 'js-yaml';
 import { appendToPipeline, appendToScanHistory, runCapture, sleep } from './portal-assist.mjs';
 import { notifyJobs } from './notify-alerts.mjs';
 import { generateTailoredResumesForJobs } from './generate-tailored-resumes.mjs';
 
 const CONFIG_PATH = 'config/job-alerts.yml';
+const PROFILE_PATH = 'config/profile.yml';
+const SUPPORTED_PORTALS = ['linkedin', 'indeed', 'dice', 'naukri'];
+const PORTAL_LOGIN_PROFILE_ROOT = '.browser-profiles';
 
 function parseArgs(args) {
   const out = { _: [] };
@@ -26,7 +29,36 @@ function parseArgs(args) {
 
 async function loadConfig() {
   if (!existsSync(CONFIG_PATH)) throw new Error(`${CONFIG_PATH} not found`);
-  return yaml.load(await readFile(CONFIG_PATH, 'utf8'));
+  const config = yaml.load(await readFile(CONFIG_PATH, 'utf8'));
+  if (!Array.isArray(config.keywords) || config.keywords.length === 0) {
+    config.keywords = await loadKeywordFallbacks();
+    console.warn(`Preflight: config/job-alerts.yml has no keywords; using ${config.keywords.length} role keyword(s) from profile/defaults.`);
+  }
+  return config;
+}
+
+async function loadKeywordFallbacks() {
+  if (existsSync(PROFILE_PATH)) {
+    const profile = yaml.load(await readFile(PROFILE_PATH, 'utf8')) || {};
+    const primary = profile.target_roles?.primary || [];
+    const archetypes = (profile.target_roles?.archetypes || []).map((item) => item?.name).filter(Boolean);
+    const keywords = [...primary, ...archetypes]
+      .map((item) => String(item).trim())
+      .filter(Boolean);
+    if (keywords.length > 0) return [...new Set(keywords)].slice(0, 8);
+  }
+  return [
+    'Senior Android Engineer Kotlin',
+    'Android Developer Kotlin',
+    'Android Engineer Jetpack Compose',
+    'Mobile Android Engineer',
+    'Android SDK Engineer',
+    'Android Platform Engineer',
+    'Kotlin Multiplatform Android',
+    'Lead Android Developer',
+    'Android Architect',
+    'Android Architecture Engineer',
+  ];
 }
 
 function searchRadiusForLocation(location, config) {
@@ -38,6 +70,14 @@ function searchRadiusForLocation(location, config) {
   }
   if (/texas|\btx\b/.test(text)) return radiusConfig.texas_miles ?? null;
   return radiusConfig.default_miles ?? null;
+}
+
+function listFromCsvOrArray(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
+  return String(value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function linkedinSearchUrl(keyword, location, config) {
@@ -77,34 +117,142 @@ function diceSearchUrl(keyword, location, config) {
   return `https://www.dice.com/jobs?${params.toString()}`;
 }
 
-function buildSearches(config, portalFilter = null) {
-  const searches = [];
-  const enabledPortals = {
-    linkedin: config.portals?.linkedin && (!portalFilter || portalFilter === 'linkedin'),
-    indeed: config.portals?.indeed && (!portalFilter || portalFilter === 'indeed'),
-    dice: config.portals?.dice && (!portalFilter || portalFilter === 'dice'),
-  };
-  const locations = [
+function naukriSearchUrl(keyword, location) {
+  const slug = String(keyword || 'software engineer')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '') || 'software-engineer';
+  const params = new URLSearchParams();
+  if (location) params.set('k', keyword);
+  if (location) params.set('l', location);
+  return `https://www.naukri.com/${slug}-jobs?${params.toString()}`;
+}
+
+function resolveCountries(config, countryFilter = null) {
+  if (countryFilter && countryFilter.length > 0) return countryFilter;
+  if (Array.isArray(config.active_countries) && config.active_countries.length > 0) {
+    return config.active_countries.map((value) => String(value).toLowerCase()).filter(Boolean);
+  }
+  return [];
+}
+
+function resolveLocations(config, countries = []) {
+  const countryLocations = config.country_locations || {};
+  if (countries.length > 0 && typeof countryLocations === 'object' && Object.keys(countryLocations).length > 0) {
+    const merged = [];
+    for (const country of countries) {
+      const values = countryLocations[country];
+      if (!Array.isArray(values)) continue;
+      merged.push(...values.map((item) => String(item).trim()).filter(Boolean));
+    }
+    if (merged.length > 0) return [...new Set(merged)];
+  }
+  return [
     ...(config.locations?.remote || []),
     ...(config.locations?.local || []),
     ...(config.locations?.texas || []),
   ];
+}
 
-  for (const keyword of config.keywords || []) {
-    for (const location of locations) {
-      if (enabledPortals.linkedin) {
-        searches.push({ portal: 'linkedin', keyword, location, url: linkedinSearchUrl(keyword, location, config) });
-      }
-      if (enabledPortals.indeed) {
-        searches.push({ portal: 'indeed', keyword, location, url: indeedSearchUrl(keyword, location, config) });
-      }
-      if (enabledPortals.dice) {
-        searches.push({ portal: 'dice', keyword, location, url: diceSearchUrl(keyword, location, config) });
+function resolveEnabledPortals(config, countries = [], portalFilter = null) {
+  const filteredPortals = portalFilter && portalFilter.length > 0 ? new Set(portalFilter) : null;
+  const countryPortals = config.country_portals || {};
+  let countryAllowed = null;
+
+  if (countries.length > 0 && typeof countryPortals === 'object' && Object.keys(countryPortals).length > 0) {
+    countryAllowed = new Set();
+    for (const country of countries) {
+      const portals = countryPortals[country] || [];
+      for (const portal of portals) {
+        countryAllowed.add(String(portal).toLowerCase());
       }
     }
   }
 
-  return searches;
+  const requested = Object.entries(config.portals || {})
+    .filter(([, enabled]) => Boolean(enabled))
+    .map(([portal]) => String(portal).toLowerCase());
+  const enabled = requested.filter((portal) => {
+    if (filteredPortals && !filteredPortals.has(portal)) return false;
+    if (countryAllowed && !countryAllowed.has(portal)) return false;
+    return true;
+  });
+
+  return [...new Set(enabled)];
+}
+
+function hasPortalLoginConfig(portal, config) {
+  const profileExists = existsSync(`${PORTAL_LOGIN_PROFILE_ROOT}/${portal}`);
+  if (portal === 'linkedin') {
+    const storageState = process.env.LINKEDIN_STORAGE_STATE || config.session?.linkedin_storage_state;
+    return Boolean(storageState) || profileExists;
+  }
+  return profileExists;
+}
+
+function hasAnyNotificationConfig() {
+  const hasSlackBot = Boolean(process.env.SLACK_BOT_TOKEN && process.env.SLACK_CHANNEL_ID);
+  const hasSlackWebhook = Boolean(process.env.SLACK_WEBHOOK_URL);
+  const hasTelegram = Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID);
+  return hasSlackBot || hasSlackWebhook || hasTelegram;
+}
+
+function applyPreflightValidation(config, portals) {
+  const validation = config.validation || {};
+  const skipUnconfigured = validation.skip_unconfigured_portals !== false;
+  const requirePortalLogin = validation.require_portal_login !== false;
+  const validated = [];
+  const skipped = [];
+
+  for (const portal of portals) {
+    if (!SUPPORTED_PORTALS.includes(portal)) {
+      skipped.push({ portal, reason: 'unsupported portal in job-alert-suite (supported: linkedin, indeed, dice, naukri)' });
+      continue;
+    }
+    if (requirePortalLogin && !hasPortalLoginConfig(portal, config)) {
+      skipped.push({ portal, reason: `missing login profile for ${portal}; run npm run portal:login -- ${portal}` });
+      continue;
+    }
+    validated.push(portal);
+  }
+
+  if (config.actions?.notify && !hasAnyNotificationConfig()) {
+    config.actions.notify = false;
+    console.warn('Preflight: notifications disabled because Slack/Telegram credentials are not configured.');
+  }
+
+  if (!skipUnconfigured && skipped.length > 0) {
+    const detail = skipped.map((item) => `${item.portal}: ${item.reason}`).join('; ');
+    throw new Error(`Preflight validation failed: ${detail}`);
+  }
+
+  return { validated, skipped };
+}
+
+function buildSearches(config, options = {}) {
+  const searches = [];
+  const countries = resolveCountries(config, options.countryFilter || []);
+  const enabledPortals = resolveEnabledPortals(config, countries, options.portalFilter || []);
+  const locations = resolveLocations(config, countries);
+
+  for (const keyword of config.keywords || []) {
+    for (const location of locations) {
+      if (enabledPortals.includes('linkedin')) {
+        searches.push({ portal: 'linkedin', keyword, location, url: linkedinSearchUrl(keyword, location, config) });
+      }
+      if (enabledPortals.includes('indeed')) {
+        searches.push({ portal: 'indeed', keyword, location, url: indeedSearchUrl(keyword, location, config) });
+      }
+      if (enabledPortals.includes('dice')) {
+        searches.push({ portal: 'dice', keyword, location, url: diceSearchUrl(keyword, location, config) });
+      }
+      if (enabledPortals.includes('naukri')) {
+        searches.push({ portal: 'naukri', keyword, location, url: naukriSearchUrl(keyword, location) });
+      }
+    }
+  }
+
+  return { searches, portals: enabledPortals, countries };
 }
 
 function shouldKeepByScore(job, config) {
@@ -152,6 +300,14 @@ async function attachTailoredResumesIfNeeded(config, jobs) {
   return generateTailoredResumesForJobs(jobs);
 }
 
+async function writeRunSummary(summary) {
+  await mkdir('output', { recursive: true });
+  await writeFile('output/last-alert-run.json', JSON.stringify({
+    ...summary,
+    updatedAt: new Date().toISOString(),
+  }, null, 2), 'utf8');
+}
+
 function applyNotificationRouting(config, jobs) {
   const slackChannelByPortal = config.notifications?.slack_channel_by_portal || {};
   for (const job of jobs) {
@@ -160,13 +316,42 @@ function applyNotificationRouting(config, jobs) {
   }
 }
 
+function captureOptionsForPortal(config, portal) {
+  const defaults = {
+    pages: config.capture?.pages || 1,
+    scrolls: config.capture?.scrolls || 4,
+    detail_limit: config.capture?.detail_limit || 25,
+    action_delay_ms: config.capture?.action_delay_ms || 1600,
+    search_delay_ms: config.capture?.search_delay_ms || 3000,
+    slow_mo: config.capture?.slow_mo || 0,
+    headless: config.capture?.headless ?? true,
+  };
+  const overrides = config.capture?.portal_overrides?.[portal] || {};
+  return { ...defaults, ...overrides };
+}
+
 async function runOnce(options = {}) {
   const config = await loadConfig();
-  const portalFilter = options.portal ? String(options.portal).toLowerCase() : null;
-  if (portalFilter && !['linkedin', 'indeed', 'dice'].includes(portalFilter)) {
-    throw new Error('--portal must be linkedin, indeed, or dice');
+  const portalFilter = listFromCsvOrArray(options.portal).map((item) => item.toLowerCase());
+  const countryFilter = listFromCsvOrArray(options.country).map((item) => item.toLowerCase());
+  if (portalFilter.some((portal) => !SUPPORTED_PORTALS.includes(portal))) {
+    throw new Error('--portal must be a comma-separated list containing linkedin, indeed, dice, or naukri');
   }
-  let searches = buildSearches(config, portalFilter);
+  const { searches: generatedSearches, portals, countries } = buildSearches(config, { portalFilter, countryFilter });
+  const preflight = applyPreflightValidation(config, portals);
+  const usablePortals = new Set(preflight.validated);
+  let searches = generatedSearches.filter((search) => usablePortals.has(search.portal));
+
+  if (preflight.skipped.length > 0) {
+    console.log('Preflight skipped portals:');
+    for (const item of preflight.skipped) {
+      console.log(`- ${item.portal}: ${item.reason}`);
+    }
+  }
+  if (searches.length === 0) {
+    throw new Error('No runnable searches after applying country/portal filters and preflight validation.');
+  }
+
   if (options['limit-searches']) {
     searches = searches.slice(0, Number(options['limit-searches']));
   }
@@ -177,7 +362,9 @@ async function runOnce(options = {}) {
   );
   let totalNew = 0;
 
-  console.log(`Job alert suite: ${searches.length} generated Android searches${portalFilter ? ` for ${portalFilter}` : ''}`);
+  const portalSummary = preflight.validated.join(', ');
+  const countrySummary = countries.length > 0 ? countries.join(', ') : 'default locations';
+  console.log(`Job alert suite: ${searches.length} generated Android searches | portals: ${portalSummary} | countries: ${countrySummary}`);
   if (dryRun) console.log('(dry run - no pipeline writes, alerts, or PDFs)');
   const collected = [];
   const failures = [];
@@ -185,17 +372,20 @@ async function runOnce(options = {}) {
   for (let i = 0; i < searches.length; i += 1) {
     const search = searches[i];
     console.log(`\nSearch ${i + 1}/${searches.length}: ${search.portal} | ${search.keyword} | ${search.location}`);
-    const storageState = search.portal === 'linkedin' ? config.session?.linkedin_storage_state : undefined;
+    const storageState = search.portal === 'linkedin'
+      ? (process.env.LINKEDIN_STORAGE_STATE || config.session?.linkedin_storage_state)
+      : undefined;
+    const captureOptions = captureOptionsForPortal(config, search.portal);
     try {
       const jobs = await runCapture(search.portal, {
         url: search.url,
-        pages: config.capture?.pages || 1,
-        scrolls: config.capture?.scrolls || 4,
-        'detail-limit': config.capture?.detail_limit || 25,
-        'action-delay-ms': config.capture?.action_delay_ms || 1600,
-        'search-delay-ms': config.capture?.search_delay_ms || 3000,
-        'slow-mo': config.capture?.slow_mo || 0,
-        headless: config.capture?.headless ?? true,
+        pages: captureOptions.pages,
+        scrolls: captureOptions.scrolls,
+        'detail-limit': captureOptions.detail_limit,
+        'action-delay-ms': captureOptions.action_delay_ms,
+        'search-delay-ms': captureOptions.search_delay_ms,
+        'slow-mo': captureOptions.slow_mo,
+        headless: captureOptions.headless,
         'storage-state': storageState,
         'collect-only': true,
         'dry-run': false,
@@ -220,9 +410,11 @@ async function runOnce(options = {}) {
   const finalJobs = dedupeJobs(collected);
   applyNotificationRouting(config, finalJobs);
   totalNew = finalJobs.length;
+  let resumeResult = null;
+  let notificationResult = [];
 
   if (!dryRun) {
-    const resumeResult = await attachTailoredResumesIfNeeded(config, finalJobs);
+    resumeResult = await attachTailoredResumesIfNeeded(config, finalJobs);
     if (resumeResult) {
       console.log(`Generated ${resumeResult.manifest.length} tailored resume PDF(s) for alerts.`);
     }
@@ -236,7 +428,7 @@ async function runOnce(options = {}) {
       historyWritten = true;
     }
     if (config.actions?.notify) {
-      const notificationResult = await notifyJobs(finalJobs);
+      notificationResult = await notifyJobs(finalJobs);
       console.log(JSON.stringify(notificationResult, null, 2));
       if (!historyWritten) {
         appendToScanHistory(finalJobs);
@@ -250,6 +442,18 @@ async function runOnce(options = {}) {
       console.log(`- ${failure.search.portal} | ${failure.search.keyword} | ${failure.search.location}: ${failure.error.split('\n')[0]}`);
     }
   }
+  await writeRunSummary({
+    dryRun,
+    countries,
+    portals: preflight.validated,
+    skipped: preflight.skipped,
+    failures,
+    totalNew,
+    jobs: finalJobs,
+    resumes: resumeResult?.manifest || [],
+    manifestPath: resumeResult?.manifestPath || '',
+    notifications: notificationResult,
+  });
   console.log(`Job alert suite complete. New actionable jobs: ${totalNew}`);
 }
 
@@ -270,7 +474,7 @@ async function main() {
   const command = args._[0] || 'once';
   if (command === 'once') return runOnce(args);
   if (command === 'run') return runLoop(args);
-  console.log('Usage: node job-alert-suite.mjs once|run [--dry-run]');
+  console.log('Usage: node job-alert-suite.mjs once|run [--dry-run] [--portal linkedin,indeed,dice,naukri] [--country us,india]');
   process.exit(1);
 }
 

@@ -86,14 +86,22 @@ git clone https://github.com/santifer/career-engine.git
 cd career-engine && npm install
 npx playwright install chromium   # Required for PDF generation
 
-# 2. Check setup
-npm run doctor                     # Validates all prerequisites
+# 2. Start the guided setup screen
+npm run setup                      # Open http://127.0.0.1:4321
+# Upload a PDF/DOC/DOCX resume, choose portals by country, connect alerts,
+# then use the dashboard to run LinkedIn/Indeed/Dice/Naukri and review matches.
 
-# 3. Configure
+# 3. Check setup
+npm run doctor                     # Validates all prerequisites
+node security-check.mjs            # Optional: checks tracked files for accidental secrets
+
+# Manual alternative
 cp config/profile.example.yml config/profile.yml  # Edit with your details
 cp templates/portals.example.yml portals.yml       # Customize companies
+cp config/job-alerts.example.yml config/job-alerts.yml
+cp .env.example .env
 
-# 4. Add your CV
+# 4. Add your CV if you skipped the wizard
 # Create cv.md in the project root with your CV in markdown
 
 # 5. Personalize with Claude

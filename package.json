@@ -3,7 +3,9 @@
   "version": "1.7.0",
   "description": "AI-powered job search pipeline built on Claude Code",
   "scripts": {
+    "setup": "node setup-wizard.mjs",
     "doctor": "node doctor.mjs",
+    "security:check": "node security-check.mjs",
     "verify": "node verify-pipeline.mjs",
     "normalize": "node normalize-statuses.mjs",
     "dedup": "node dedup-tracker.mjs",
@@ -23,6 +25,8 @@
     "scan:indeed:dry-run": "node job-alert-suite.mjs once --portal indeed --dry-run",
     "scan:dice": "node job-alert-suite.mjs once --portal dice",
     "scan:dice:dry-run": "node job-alert-suite.mjs once --portal dice --dry-run",
+    "scan:naukri": "node job-alert-suite.mjs once --portal naukri",
+    "scan:naukri:dry-run": "node job-alert-suite.mjs once --portal naukri --dry-run",
     "gemini:eval": "node gemini-eval.mjs",
     "portal:login": "node portal-assist.mjs login",
     "portal:capture": "node portal-assist.mjs capture",
@@ -51,6 +55,7 @@
     "@google/generative-ai": "^0.24.1",
     "dotenv": "^16.4.5",
     "js-yaml": "^4.1.1",
+    "pdf-parse": "^1.1.1",
     "playwright": "^1.58.1"
   }
 }
